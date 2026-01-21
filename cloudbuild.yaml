@@ -1,0 +1,37 @@
+steps:
+  # 1. Build Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'europe-west1-docker.pkg.dev/$PROJECT_ID/haccforum-repo/haccforum:$COMMIT_SHA', '.']
+
+  # 2. Push Docker image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'europe-west1-docker.pkg.dev/$PROJECT_ID/haccforum-repo/haccforum:$COMMIT_SHA']
+
+  # 3. Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'haccforum-service'
+      - '--image'
+      - 'europe-west1-docker.pkg.dev/$PROJECT_ID/haccforum-repo/haccforum:$COMMIT_SHA'
+      - '--region'
+      - 'europe-west1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--port'
+      - '8080'
+      - '--memory'
+      - '512Mi'
+      # We inject secrets as environment variables here.
+      # Configure _MONGODB_URI and _JWT_SECRET in the Cloud Build Trigger settings on GCP Console.
+      - '--set-env-vars'
+      - 'MONGODB_URI=$_MONGODB_URI,JWT_SECRET=$_JWT_SECRET,GCS_BUCKET_NAME=haccforum-uploads,NODE_ENV=production'
+
+images:
+  - 'europe-west1-docker.pkg.dev/$PROJECT_ID/haccforum-repo/haccforum:$COMMIT_SHA'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

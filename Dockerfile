@@ -12,12 +12,14 @@ RUN npm ci
 # Copy source code
 COPY . .
 
-# Build frontend (produces dist/)
-RUN npm run build
+# Set API base URL for production build to use relative path
+ENV VITE_API_BASE_URL=/api
 
-# Build backend (produces dist/server/)
-# Use a separate config or move files after if they conflict, 
-# but tsc -p tsconfig.server.json outputs to dist/server so it should be fine merging into dist/
+# Build frontend (produces dist/client)
+# We pass --outDir to ensure it goes to the right place for the server to find
+RUN npm run build -- --outDir dist/client
+
+# Build backend (produces dist/server)
 RUN npm run server:build
 
 # Production stage
@@ -30,15 +32,7 @@ COPY package*.json ./
 RUN npm ci --only=production
 
 # Copy built assets from builder
-# Copy backend files
-COPY --from=build /app/dist/server ./dist/server
-# Copy frontend files (from dist root to public root or similar)
-# We will serve frontend from ./dist/client in the code to keep it clean, 
-# so let's move dist/* (excluding server) to dist/client 
-COPY --from=build /app/dist/assets ./dist/client/assets
-COPY --from=build /app/dist/index.html ./dist/client/index.html
-COPY --from=build /app/dist/favicon.ico ./dist/client/favicon.ico
-# Copy any other files in public if needed, or just the vite build output
+COPY --from=build /app/dist ./dist
 
 # Expose port
 ENV PORT=8080
