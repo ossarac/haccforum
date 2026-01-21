@@ -1,6 +1,6 @@
 # HaccForum
 
-Rich article authoring and discussion platform with hierarchical threads, backed by MongoDB and secured user sessions.
+I believe that written articles are very important ways to spread ideas and search for truth. I want to create a platform for people to defend and discuss their ideas with Rich article authoring and discussion platform with hierarchical threads, backed by MongoDB and secured user sessions.
 
 ## Prerequisites
 
