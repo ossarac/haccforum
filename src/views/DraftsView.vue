@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { useArticleStore } from '../stores/articleStore'
 import { useAuthStore } from '../stores/authStore'
 import Dialog from '../components/Dialog.vue'
-import { Plus, Trash2 } from 'lucide-vue-next'
+import { Plus, Trash2, Send } from 'lucide-vue-next'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -15,6 +15,7 @@ const auth = useAuthStore()
 const isLoading = computed(() => articleStore.loadingStates['drafts'] ?? false)
 const drafts = computed(() => articleStore.userDrafts)
 const deletingId = ref<string | null>(null)
+const publishingId = ref<string | null>(null)
 const showDeleteConfirm = ref(false)
 const draftToDelete = ref<string | null>(null)
 
@@ -40,6 +41,17 @@ const deleteDraftPermanently = async () => {
 const openDeleteConfirm = (id: string) => {
   draftToDelete.value = id
   showDeleteConfirm.value = true
+}
+
+const publishDraft = async (id: string) => {
+  publishingId.value = id
+  try {
+    await articleStore.publishArticle(id)
+  } catch (error) {
+    console.error('[drafts] Failed to publish draft:', error)
+  } finally {
+    publishingId.value = null
+  }
 }
 
 const createNewDraft = () => {
@@ -133,6 +145,15 @@ onMounted(async () => {
           <div class="draft-footer">
             <button class="secondary-btn" @click="editDraft(draft.id)">
               {{ t('drafts.continueEditing') }}
+            </button>
+            <button 
+              class="publish-btn" 
+              @click="publishDraft(draft.id)"
+              :disabled="publishingId === draft.id"
+              :title="t('drafts.publishDraft')"
+            >
+              <Send :size="16" />
+              {{ publishingId === draft.id ? t('drafts.publishing') : t('drafts.publish') }}
             </button>
           </div>
         </div>
@@ -342,6 +363,31 @@ onMounted(async () => {
 .secondary-btn:hover {
   background: var(--bg-color);
   border-color: var(--accent-color);
+}
+
+.publish-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--accent-color);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.publish-btn:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.publish-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .primary {

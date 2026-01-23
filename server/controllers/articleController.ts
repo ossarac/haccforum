@@ -146,11 +146,13 @@ export async function listArticles(req: Request, res: Response): Promise<void> {
     return
   }
 
+  // Filter out deleted articles unless admin explicitly requests them
   if (!includeDeleted) {
     filters.push({ deleted: { $ne: true } })
-    // Filter for published articles OR articles without the published field (for backward compatibility)
-    filters.push({ $or: [{ published: true }, { published: { $exists: false } }] })
   }
+  
+  // Always filter for published articles (drafts are accessed via /drafts/my endpoint)
+  filters.push({ $or: [{ published: true }, { published: { $exists: false } }] })
 
   console.log(`[listArticles] Query filters:`, JSON.stringify(filters, null, 2))
   const articles = await ArticleModel.find({ $and: filters })

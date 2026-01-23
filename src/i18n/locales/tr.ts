@@ -239,10 +239,13 @@ export default {
     startWriting: 'Yeni bir makale yazmaya başlayın veya çalışmanızı taslak olarak kaydedin',
     createFirstDraft: 'İlk Taslağınızı Oluşturun',
     lastUpdated: 'Son güncellenme',
-    continueEditing: 'Düzenlemekten Devam Et',
+    continueEditing: 'Düzenlemeye Devam Et',
     deleteDraft: 'Taslağı Sil',
     deleteConfirmation: 'Bu taslağı kalıcı olarak silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.',
-    untitledDraft: 'Başlıksız Taslak'
+    untitledDraft: 'Başlıksız Taslak',
+    publish: 'Yayınla',
+    publishDraft: 'Taslağı Yayınla',
+    publishing: 'Yayınlanıyor...'
   },
   admin: {
     articleManagement: 'Makale Yönetimi',

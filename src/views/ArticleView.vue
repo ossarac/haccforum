@@ -1090,7 +1090,7 @@ watch(
 .floating-scroll-top,
 .floating-scroll-bottom {
   position: fixed;
-  right: 2rem;
+  right: max(2rem, calc(50% - 680px));
   z-index: 95;
   box-shadow: 0 8px 24px rgb(0 0 0 / 0.08);
   background: var(--surface-color);
@@ -1099,8 +1099,8 @@ watch(
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   padding: 0;
   border-radius: 4px;
   cursor: pointer;
@@ -1113,17 +1113,16 @@ watch(
 }
 
 .floating-scroll-bottom {
-  bottom: 60px;
+  bottom: 166px;
 }
 
 .floating-scroll-top:hover,
 .floating-scroll-bottom:hover {
   border-color: var(--accent-color);
   color: var(--accent-color);
-  transform: scale(1.05);
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1350px) {
   .floating-scroll-top,
   .floating-scroll-bottom {
     display: none;
@@ -1152,7 +1151,7 @@ watch(
   display: none;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1350px) {
   .mobile-only {
     display: flex;
   }

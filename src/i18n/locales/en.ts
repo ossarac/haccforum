@@ -242,7 +242,10 @@ export default {
     continueEditing: 'Continue Editing',
     deleteDraft: 'Delete Draft',
     deleteConfirmation: 'Are you sure you want to permanently delete this draft? This action cannot be undone.',
-    untitledDraft: 'Untitled Draft'
+    untitledDraft: 'Untitled Draft',
+    publish: 'Publish',
+    publishDraft: 'Publish Draft',
+    publishing: 'Publishing...'
   },
   admin: {
     articleManagement: 'Article Management',
