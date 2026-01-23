@@ -333,7 +333,7 @@ export const useArticleStore = defineStore('article', () => {
     /**
      * Fetch all articles for a specific topic (including subtopics)
      */
-    const fetchArticlesByTopic = async (topicId: string, includeSubtopics: boolean = true) => {
+    const fetchArticlesByTopic = async (topicId: string) => {
         const cacheKey = `topic-${topicId}`
         loadingStates[cacheKey] = true
         try {

@@ -131,7 +131,7 @@ const footnotes = computed(() => {
   const footnoteList: Array<{ id: string; content: string; number: number }> = []
   const doc = editor.value.state.doc
   
-  doc.descendants((node, pos) => {
+  doc.descendants((node, _pos) => {
     if (node.marks) {
       node.marks.forEach(mark => {
         if (mark.type.name === 'footnote') {

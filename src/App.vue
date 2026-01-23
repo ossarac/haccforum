@@ -5,7 +5,7 @@ import { storeToRefs } from 'pinia'
 import { Moon, Sun, PenTool, LogOut, FileText, Settings, Languages } from 'lucide-vue-next'
 import { useAuthStore } from './stores/authStore'
 import { useI18n } from 'vue-i18n'
-import { setLanguage, getLanguage } from './i18n'
+import { setLanguage } from './i18n'
 
 const { t, locale } = useI18n()
 const isDark = ref(false)
