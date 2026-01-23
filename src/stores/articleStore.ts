@@ -14,6 +14,7 @@ export interface Article {
     content: string
     parentId: string | null
     ancestors: string[]
+    topicId: string | null
     version: number
     published: boolean
     publishedAt: string | null
@@ -41,6 +42,7 @@ interface SaveArticleInput {
     content: string
     authorName?: string
     parentId?: string | null
+    topicId?: string | null
 }
 
 const ROOT_KEY = 'root'
@@ -133,6 +135,7 @@ export const useArticleStore = defineStore('article', () => {
                 content: input.content,
                 authorName: input.authorName,
                 parentId: input.parentId ?? null,
+                topicId: input.topicId ?? null,
                 version: current.version
             }
 
@@ -150,7 +153,8 @@ export const useArticleStore = defineStore('article', () => {
                 title: input.title,
                 content: input.content,
                 authorName: input.authorName,
-                parentId: input.parentId ?? null
+                parentId: input.parentId ?? null,
+                topicId: input.topicId ?? null
             })
         })
         mergeArticle(response.article)
@@ -285,6 +289,63 @@ export const useArticleStore = defineStore('article', () => {
 
     const getRevisions = (id: string) => revisionsByArticle[id] ?? []
 
+    /**
+     * Fetch recent articles for dashboard
+     */
+    const fetchRecentArticles = async (limit: number = 6) => {
+        loadingStates['recent'] = true
+        try {
+            const response = await apiRequest<{ articles: Article[] }>(`/articles/recent?limit=${limit}`)
+            response.articles.forEach(article => mergeArticle(article))
+            return response.articles
+        } finally {
+            loadingStates['recent'] = false
+        }
+    }
+
+    /**
+     * Fetch topic statistics for dashboard
+     */
+    const fetchTopicStatistics = async () => {
+        loadingStates['topic-stats'] = true
+        try {
+            const response = await apiRequest<{ 
+                statistics: Array<{
+                    _id: string | null
+                    totalArticles: number
+                    latestArticle: string | null
+                    latestUpdate: string
+                    latestArticles: Article[]
+                }>
+            }>('/articles/topic-stats')
+            
+            // Merge articles into cache
+            response.statistics.forEach(stat => {
+                stat.latestArticles.forEach(article => mergeArticle(article))
+            })
+            
+            return response.statistics
+        } finally {
+            loadingStates['topic-stats'] = false
+        }
+    }
+
+    /**
+     * Fetch all articles for a specific topic (including subtopics)
+     */
+    const fetchArticlesByTopic = async (topicId: string, includeSubtopics: boolean = true) => {
+        const cacheKey = `topic-${topicId}`
+        loadingStates[cacheKey] = true
+        try {
+            const query = `?topicId=${encodeURIComponent(topicId)}`
+            const response = await apiRequest<{ articles: Article[] }>(`/articles${query}`)
+            response.articles.forEach(article => mergeArticle(article))
+            return response.articles
+        } finally {
+            loadingStates[cacheKey] = false
+        }
+    }
+
     return {
         articlesById,
         allArticles,
@@ -301,6 +362,9 @@ export const useArticleStore = defineStore('article', () => {
         duplicateToDraft,
         unpublishArticle,
         deleteArticle,
-        deleteDraft
+        deleteDraft,
+        fetchRecentArticles,
+        fetchTopicStatistics,
+        fetchArticlesByTopic
     }
 })

@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/authStore'
 
+const { t } = useI18n()
 const name = ref('')
 const email = ref('')
 const password = ref('')
@@ -17,23 +19,23 @@ const handleSubmit = async () => {
   errorMessage.value = ''
 
   if (!name.value || !email.value || !password.value) {
-    errorMessage.value = 'All fields are required'
+    errorMessage.value = t('signup.allFieldsRequired')
     return
   }
 
   if (password.value !== confirmPassword.value) {
-    errorMessage.value = 'Passwords do not match'
+    errorMessage.value = t('signup.passwordsDoNotMatch')
     return
   }
 
   if (password.value.length < 6) {
-    errorMessage.value = 'Password must be at least 6 characters'
+    errorMessage.value = t('auth.passwordLength')
     return
   }
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
   if (!emailRegex.test(email.value)) {
-    errorMessage.value = 'Please enter a valid email address'
+    errorMessage.value = t('signup.invalidEmail')
     return
   }
 
@@ -47,7 +49,7 @@ const handleSubmit = async () => {
     })
     router.push('/')
   } catch (error: any) {
-    errorMessage.value = error.message || 'Failed to create account'
+    errorMessage.value = error.message || t('signup.failedToCreateAccount')
   } finally {
     isSubmitting.value = false
   }
@@ -61,43 +63,43 @@ const goToLogin = () => {
 <template>
   <div class="auth-container">
     <div class="auth-card">
-      <h1>Create Account</h1>
-      <p class="subtitle">Join HaccForum to start writing and collaborating</p>
+      <h1>{{ t('signup.createAccount') }}</h1>
+      <p class="subtitle">{{ t('signup.joinMessage') }}</p>
 
       <form @submit.prevent="handleSubmit" class="form">
         <label class="field">
-          <span>Name</span>
+          <span>{{ t('auth.name') }}</span>
           <input v-model="name" type="text" autocomplete="name" placeholder="Your name" />
         </label>
 
         <label class="field">
-          <span>Email</span>
+          <span>{{ t('auth.email') }}</span>
           <input v-model="email" type="email" autocomplete="email" placeholder="you@example.com" />
         </label>
 
         <label class="field">
-          <span>Password</span>
-          <input v-model="password" type="password" autocomplete="new-password" placeholder="At least 6 characters" />
+          <span>{{ t('auth.password') }}</span>
+          <input v-model="password" type="password" autocomplete="new-password" :placeholder="t('signup.atLeast6Characters')" />
         </label>
 
         <label class="field">
-          <span>Confirm Password</span>
-          <input v-model="confirmPassword" type="password" autocomplete="new-password" placeholder="Repeat password" />
+          <span>{{ t('signup.confirmPassword') }}</span>
+          <input v-model="confirmPassword" type="password" autocomplete="new-password" :placeholder="t('signup.repeatPassword')" />
         </label>
 
         <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
 
         <button class="primary" type="submit" :disabled="isSubmitting">
-          <span v-if="!isSubmitting">Sign Up</span>
-          <span v-else>Creating Account…</span>
+          <span v-if="!isSubmitting">{{ t('signup.signUp') }}</span>
+          <span v-else>{{ t('signup.creatingAccount') }}</span>
         </button>
 
         <div class="divider">
-          <span>Already have an account?</span>
+          <span>{{ t('signup.alreadyHaveAccount') }}</span>
         </div>
 
         <button type="button" class="secondary" @click="goToLogin">
-          Sign In
+          {{ t('auth.login') }}
         </button>
       </form>
     </div>

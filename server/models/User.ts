@@ -15,6 +15,7 @@ export interface UserDocument extends Document {
   passwordHash: string
   roles: string[]
   emailVerified: boolean
+  language?: string
   readingPreferences?: ReadingPreferences
   comparePassword(password: string): Promise<boolean>
 }
@@ -45,6 +46,11 @@ const userSchema = new Schema<UserDocument>(
     emailVerified: {
       type: Boolean,
       default: false
+    },
+    language: {
+      type: String,
+      enum: ['tr', 'en'],
+      default: 'tr'
     },
     readingPreferences: {
       backgroundId: String,

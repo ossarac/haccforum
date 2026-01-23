@@ -75,20 +75,22 @@ const handleKeydown = (event: KeyboardEvent) => {
         </div>
 
         <div class="dialog-body">
-          <p class="dialog-message">{{ message }}</p>
+          <slot name="content">
+            <p class="dialog-message">{{ message }}</p>
 
-          <div v-if="type === 'input'" class="input-section">
-            <input
-              v-model="inputValue"
-              :placeholder="placeholder"
-              class="dialog-input"
-              ref="inputEl"
-              @keydown="handleKeydown"
-            />
-          </div>
+            <div v-if="type === 'input'" class="input-section">
+              <input
+                v-model="inputValue"
+                :placeholder="placeholder"
+                class="dialog-input"
+                ref="inputEl"
+                @keydown="handleKeydown"
+              />
+            </div>
+          </slot>
         </div>
 
-        <div class="dialog-footer">
+        <div class="dialog-footer" v-if="!$slots.content">
           <button
             v-if="type === 'confirm' || type === 'input'"
             @click="handleCancel"

@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/authStore'
 
+const { t } = useI18n()
 const email = ref('')
 const password = ref('')
 const errorMessage = ref('')
@@ -19,7 +21,7 @@ const redirect = () => {
 
 const handleSubmit = async () => {
   if (!email.value || !password.value) {
-    errorMessage.value = 'Enter email and password'
+    errorMessage.value = t('login.enterEmailPassword')
     return
   }
 
@@ -40,33 +42,33 @@ const handleSubmit = async () => {
 <template>
   <div class="auth-container">
     <div class="auth-card">
-      <h1>Welcome Back</h1>
-      <p class="subtitle">Sign in to continue editing</p>
+      <h1>{{ t('login.welcomeBack') }}</h1>
+      <p class="subtitle">{{ t('login.signInMessage') }}</p>
 
       <form @submit.prevent="handleSubmit" class="form">
         <label class="field">
-          <span>Email</span>
+          <span>{{ t('auth.email') }}</span>
           <input v-model="email" type="email" autocomplete="email" placeholder="you@example.com" />
         </label>
 
         <label class="field">
-          <span>Password</span>
+          <span>{{ t('auth.password') }}</span>
           <input v-model="password" type="password" autocomplete="current-password" />
         </label>
 
         <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
 
         <button class="primary" type="submit" :disabled="isSubmitting">
-          <span v-if="!isSubmitting">Sign In</span>
-          <span v-else>Signing In…</span>
+          <span v-if="!isSubmitting">{{ t('login.signIn') }}</span>
+          <span v-else>{{ t('login.signingIn') }}</span>
         </button>
 
         <div class="divider">
-          <span>Don't have an account?</span>
+          <span>{{ t('login.dontHaveAccount') }}</span>
         </div>
 
         <button type="button" class="secondary" @click="router.push('/signup')">
-          Sign Up
+          {{ t('auth.signup') }}
         </button>
       </form>
     </div>

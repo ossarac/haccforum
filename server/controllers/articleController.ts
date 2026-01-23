@@ -2,8 +2,10 @@ import type { Request, Response } from 'express'
 import { Types } from 'mongoose'
 import ArticleModel from '../models/Article.js'
 import type { ArticleDocument } from '../models/Article.js'
+import TopicModel from '../models/Topic.js'
 import UserModel from '../models/User.js'
 import { buildArticleExportHtml } from '../services/articleExport.js'
+import { t } from '../i18n/index.js'
 
 interface ArticleResponse {
   id: string
@@ -11,6 +13,7 @@ interface ArticleResponse {
   content: string
   parentId: string | null
   ancestors: string[]
+  topicId: string | null
   version: number
   published: boolean
   publishedAt: string | null
@@ -49,6 +52,7 @@ function formatArticle(article: ArticleDocument & { author: any }): ArticleRespo
     content: article.content,
     parentId: article.parentId ? article.parentId.toString() : null,
     ancestors: article.ancestors.map(id => id.toString()),
+    topicId: article.topicId ? article.topicId.toString() : null,
     version: article.version,
     createdAt: article.createdAt.toISOString(),
     updatedAt: article.updatedAt.toISOString(),
@@ -93,32 +97,32 @@ async function formatRevisions(article: ArticleDocument): Promise<RevisionRespon
     }))
 }
 
-function validateParentId(parentId: unknown): Types.ObjectId | null {
+function validateParentId(parentId: unknown, req?: Request): Types.ObjectId | null {
   if (parentId === null || parentId === undefined || parentId === '') {
     return null
   }
   if (typeof parentId !== 'string' || !Types.ObjectId.isValid(parentId)) {
-    throw new Error('Invalid parentId')
+    throw new Error(t('invalidParentId', req))
   }
   return new Types.ObjectId(parentId)
 }
 
-async function resolveAncestors(parent: Types.ObjectId | null): Promise<Types.ObjectId[]> {
+async function resolveAncestors(parent: Types.ObjectId | null, req?: Request): Promise<Types.ObjectId[]> {
   if (!parent) {
     return []
   }
   const parentArticle = await ArticleModel.findById(parent)
   if (!parentArticle) {
-    throw new Error('Parent article not found')
+    throw new Error(t('parentArticleNotFound', req))
   }
   if (parentArticle.deleted) {
-    throw new Error('Parent article has been deleted')
+    throw new Error(t('parentArticleDeleted', req))
   }
   return [...parentArticle.ancestors, parentArticle._id]
 }
 
 export async function listArticles(req: Request, res: Response): Promise<void> {
-  const { parentId } = req.query
+  const { parentId, topicId } = req.query
   const isAdmin = isAdminUser(req)
   const includeDeleted = isAdmin && parseBooleanFlag(req.query.includeDeleted)
 
@@ -128,11 +132,20 @@ export async function listArticles(req: Request, res: Response): Promise<void> {
   } else if (typeof parentId === 'string' && Types.ObjectId.isValid(parentId)) {
     parentFilter = { parentId }
   } else {
-    res.status(400).json({ message: 'Invalid parentId parameter' })
+    res.status(400).json({ message: t('invalidParentIdParameter', req) })
     return
   }
 
   const filters: Record<string, unknown>[] = [parentFilter]
+  
+  // Add topicId filter if provided
+  if (topicId && typeof topicId === 'string' && Types.ObjectId.isValid(topicId)) {
+    filters.push({ topicId })
+  } else if (topicId && typeof topicId === 'string') {
+    res.status(400).json({ message: t('invalidTopicIdParameter', req) })
+    return
+  }
+
   if (!includeDeleted) {
     filters.push({ deleted: { $ne: true } })
     // Filter for published articles OR articles without the published field (for backward compatibility)
@@ -156,18 +169,18 @@ export async function getArticle(req: Request, res: Response): Promise<void> {
   const { id } = req.params
   const isAdmin = isAdminUser(req)
   if (!Types.ObjectId.isValid(id)) {
-    res.status(400).json({ message: 'Invalid article id' })
+    res.status(400).json({ message: t('invalidArticleId', req) })
     return
   }
 
   const article = await ArticleModel.findById(id).populate('author', 'name email')
   if (!article) {
-    res.status(404).json({ message: 'Article not found' })
+    res.status(404).json({ message: t('articleNotFound', req) })
     return
   }
 
   if (article.deleted && !isAdmin) {
-    res.status(404).json({ message: 'Article not found' })
+    res.status(404).json({ message: t('articleNotFound', req) })
     return
   }
 
@@ -176,30 +189,61 @@ export async function getArticle(req: Request, res: Response): Promise<void> {
 }
 
 export async function createArticle(req: Request, res: Response): Promise<void> {
-  const { title, content, parentId, authorName } = req.body ?? {}
+  const { title, content, parentId, topicId, authorName } = req.body ?? {}
   if (!req.user) {
-    res.status(401).json({ message: 'Unauthorized' })
+    res.status(401).json({ message: t('unauthorized', req) })
     return
   }
   if (!title || !content) {
-    res.status(400).json({ message: 'title and content are required' })
+    res.status(400).json({ message: t('titleAndContentRequired', req) })
     return
   }
 
   let parent: Types.ObjectId | null
   try {
-    parent = validateParentId(parentId)
+    parent = validateParentId(parentId, req)
   } catch (error) {
     res.status(400).json({ message: (error as Error).message })
     return
   }
 
   let ancestors: Types.ObjectId[] = []
+  let resolvedTopicId: Types.ObjectId | null = null
+
   try {
-    ancestors = await resolveAncestors(parent)
+    ancestors = await resolveAncestors(parent, req)
   } catch (error) {
     res.status(400).json({ message: (error as Error).message })
     return
+  }
+
+  // Handle topicId logic
+  if (parent) {
+    // Child article: inherit parent's topicId
+    const parentArticle = await ArticleModel.findById(parent)
+    if (parentArticle) {
+      resolvedTopicId = parentArticle.topicId
+    }
+  } else {
+    // Root article: topicId is required
+    if (!topicId) {
+      res.status(400).json({ message: t('topicIdRequired', req) })
+      return
+    }
+
+    if (!Types.ObjectId.isValid(topicId)) {
+      res.status(400).json({ message: t('invalidTopicId', req) })
+      return
+    }
+
+    // Verify topic exists and is not deleted
+    const topic = await TopicModel.findById(topicId)
+    if (!topic || topic.deleted) {
+      res.status(404).json({ message: t('topicNotFound', req) })
+      return
+    }
+
+    resolvedTopicId = new Types.ObjectId(topicId)
   }
 
   const article = await ArticleModel.create({
@@ -208,6 +252,7 @@ export async function createArticle(req: Request, res: Response): Promise<void> 
     authorName,
     parentId: parent,
     ancestors,
+    topicId: resolvedTopicId,
     author: new Types.ObjectId(req.user.id),
     version: 1
   })
@@ -218,78 +263,116 @@ export async function createArticle(req: Request, res: Response): Promise<void> 
 
 export async function updateArticle(req: Request, res: Response): Promise<void> {
   const { id } = req.params
-  const { title, content, parentId, version, authorName } = req.body ?? {}
+  const { title, content, parentId, topicId, version, authorName } = req.body ?? {}
 
   if (!req.user) {
-    res.status(401).json({ message: 'Unauthorized' })
+    res.status(401).json({ message: t('unauthorized', req) })
     return
   }
 
   if (!Types.ObjectId.isValid(id)) {
-    res.status(400).json({ message: 'Invalid article id' })
+    res.status(400).json({ message: t('invalidArticleId', req) })
     return
   }
 
   if (typeof version !== 'number') {
-    res.status(400).json({ message: 'version is required for optimistic locking' })
+    res.status(400).json({ message: t('versionRequired', req) })
     return
   }
 
   const article = await ArticleModel.findById(id)
   if (!article) {
-    res.status(404).json({ message: 'Article not found' })
+    res.status(404).json({ message: t('articleNotFound', req) })
     return
   }
 
   if (article.deleted) {
-    res.status(404).json({ message: 'Article not found' })
-    return
-  }
-
-  if (article.deleted) {
-    res.status(404).json({ message: 'Article not found' })
-    return
-  }
-
-  if (article.deleted) {
-    res.status(404).json({ message: 'Article not found' })
-    return
-  }
-
-  if (article.deleted) {
-    res.status(404).json({ message: 'Article not found' })
+    res.status(404).json({ message: t('articleNotFound', req) })
     return
   }
 
   if (version !== article.version) {
-    res.status(409).json({ message: 'Article has been modified. Refresh and retry.' })
+    res.status(409).json({ message: t('articleModified', req) })
+    return
+  }
+
+  // Check if user is author (needed for topic change permission and update permission)
+  const isAuthor = article.author.equals(new Types.ObjectId(req.user.id))
+  const isAdmin = isAdminUser(req)
+
+  // Only author or admin can update article
+  if (!isAuthor && !isAdmin) {
+    res.status(403).json({ message: t('onlyAuthorOrAdminCanUpdate', req) })
     return
   }
 
   let newParent: Types.ObjectId | null
   try {
-    newParent = validateParentId(parentId ?? article.parentId?.toString() ?? null)
+    newParent = validateParentId(parentId ?? article.parentId?.toString() ?? null, req)
   } catch (error) {
     res.status(400).json({ message: (error as Error).message })
     return
   }
 
   if (newParent && newParent.equals(article._id)) {
-    res.status(400).json({ message: 'Article cannot be its own parent' })
+    res.status(400).json({ message: t('articleCannotBeOwnParent', req) })
     return
   }
 
   let ancestors: Types.ObjectId[] = []
   try {
-    ancestors = await resolveAncestors(newParent)
+    ancestors = await resolveAncestors(newParent, req)
   } catch (error) {
     res.status(400).json({ message: (error as Error).message })
     return
   }
 
   if (ancestors.some(ancestorId => ancestorId.equals(article._id))) {
-    res.status(400).json({ message: 'Cannot move article under its descendant' })
+    res.status(400).json({ message: t('cannotMoveUnderDescendant', req) })
     return
+  }
+
+  // Handle topicId changes
+  let newTopicId = article.topicId
+  if (topicId !== undefined) {
+    // Topic can only be changed for root articles (parentId === null)
+    if (article.parentId) {
+      res.status(400).json({ message: t('cannotChangeTopicOfChild', req) })
+      return
+    }
+
+    // Topic can be changed if:
+    // - Article is a draft (not published), OR
+    // - User is admin (admins can change topic even on published articles)
+    const isDraft = !article.published
+    if (!isDraft && !isAdmin) {
+      res.status(403).json({ message: t('cannotChangeTopicPublished', req) })
+      return
+    }
+
+    // Only author or admin can change topic
+    if (!isAuthor && !isAdmin) {
+      res.status(403).json({ message: t('onlyAuthorOrAdminCanChangeTopic', req) })
+      return
+    }
+
+    if (topicId === null) {
+      newTopicId = null
+    } else {
+      if (!Types.ObjectId.isValid(topicId)) {
+        res.status(400).json({ message: t('invalidTopicId', req) })
+        return
+      }
+
+      // Verify topic exists and is not deleted
+      const topic = await TopicModel.findById(topicId)
+      if (!topic || topic.deleted) {
+        res.status(404).json({ message: t('topicNotFound', req) })
+        return
+      }
+
+      newTopicId = new Types.ObjectId(topicId)
+    }
   }
 
   article.revisions.push({
@@ -312,6 +395,7 @@ export async function updateArticle(req: Request, res: Response): Promise<void> 
 
   article.parentId = newParent
   article.ancestors = ancestors
+  article.topicId = newTopicId
   article.version += 1
 
   await article.save()
@@ -324,18 +408,18 @@ export async function getRevisions(req: Request, res: Response): Promise<void> {
   const { id } = req.params
   const isAdmin = isAdminUser(req)
   if (!Types.ObjectId.isValid(id)) {
-    res.status(400).json({ message: 'Invalid article id' })
+    res.status(400).json({ message: t('invalidArticleId', req) })
     return
   }
 
   const article = await ArticleModel.findById(id)
   if (!article) {
-    res.status(404).json({ message: 'Article not found' })
+    res.status(404).json({ message: t('articleNotFound', req) })
     return
   }
 
   if (article.deleted && !isAdmin) {
-    res.status(404).json({ message: 'Article not found' })
+    res.status(404).json({ message: t('articleNotFound', req) })
     return
   }
 
@@ -349,7 +433,7 @@ export async function getRevisions(req: Request, res: Response): Promise<void> {
  */
 export async function getUserDrafts(req: Request, res: Response): Promise<void> {
   if (!req.user) {
-    res.status(401).json({ message: 'Unauthorized' })
+    res.status(401).json({ message: t('unauthorized', req) })
     return
   }
 
@@ -372,24 +456,24 @@ export async function publishArticle(req: Request, res: Response): Promise<void>
   const { id } = req.params
 
   if (!req.user) {
-    res.status(401).json({ message: 'Unauthorized' })
+    res.status(401).json({ message: t('unauthorized', req) })
     return
   }
 
   if (!Types.ObjectId.isValid(id)) {
-    res.status(400).json({ message: 'Invalid article id' })
+    res.status(400).json({ message: t('invalidArticleId', req) })
     return
   }
 
   const article = await ArticleModel.findById(id)
   if (!article) {
-    res.status(404).json({ message: 'Article not found' })
+    res.status(404).json({ message: t('articleNotFound', req) })
     return
   }
 
   // Ensure only the author can publish their draft
   if (!article.author.equals(new Types.ObjectId(req.user.id))) {
-    res.status(403).json({ message: 'You do not have permission to publish this article' })
+    res.status(403).json({ message: t('noPermissionToPublish', req) })
     return
   }
 
@@ -409,34 +493,34 @@ export async function unpublishArticle(req: Request, res: Response): Promise<voi
   const { id } = req.params
 
   if (!req.user) {
-    res.status(401).json({ message: 'Unauthorized' })
+    res.status(401).json({ message: t('unauthorized', req) })
     return
   }
 
   if (!Types.ObjectId.isValid(id)) {
-    res.status(400).json({ message: 'Invalid article id' })
+    res.status(400).json({ message: t('invalidArticleId', req) })
     return
   }
 
   const article = await ArticleModel.findById(id)
   if (!article) {
-    res.status(404).json({ message: 'Article not found' })
+    res.status(404).json({ message: t('articleNotFound', req) })
     return
   }
 
   if (!article.author.equals(new Types.ObjectId(req.user.id))) {
-    res.status(403).json({ message: 'You do not have permission to unpublish this article' })
+    res.status(403).json({ message: t('noPermissionToUnpublish', req) })
     return
   }
 
   if (!article.published) {
-    res.status(400).json({ message: 'Article is not published' })
+    res.status(400).json({ message: t('articleNotPublished', req) })
     return
   }
 
   const replyCount = await ArticleModel.countDocuments({ parentId: article._id })
   if (replyCount > 0) {
-    res.status(400).json({ message: 'Cannot unpublish an article that already has replies' })
+    res.status(400).json({ message: t('cannotUnpublishWithReplies', req) })
     return
   }
 
@@ -445,7 +529,7 @@ export async function unpublishArticle(req: Request, res: Response): Promise<voi
   const twentyFourHoursMs = 24 * 60 * 60 * 1000
 
   if (elapsedMs > twentyFourHoursMs) {
-    res.status(400).json({ message: 'Unpublishing window has passed (24 hours after publishing)' })
+    res.status(400).json({ message: t('unpublishWindowPassed', req) })
     return
   }
 
@@ -466,37 +550,37 @@ export async function deleteDraft(req: Request, res: Response): Promise<void> {
   const { id } = req.params
 
   if (!req.user) {
-    res.status(401).json({ message: 'Unauthorized' })
+    res.status(401).json({ message: t('unauthorized', req) })
     return
   }
 
   if (!Types.ObjectId.isValid(id)) {
-    res.status(400).json({ message: 'Invalid article id' })
+    res.status(400).json({ message: t('invalidArticleId', req) })
     return
   }
 
   const article = await ArticleModel.findById(id)
   if (!article) {
-    res.status(404).json({ message: 'Article not found' })
+    res.status(404).json({ message: t('articleNotFound', req) })
     return
   }
 
   // Only author can delete their own draft
   if (!article.author.equals(new Types.ObjectId(req.user.id))) {
-    res.status(403).json({ message: 'You do not have permission to delete this draft' })
+    res.status(403).json({ message: t('noPermissionToDeleteDraft', req) })
     return
   }
 
   // Can only delete unpublished articles
   if (article.published) {
-    res.status(400).json({ message: 'Cannot delete a published article' })
+    res.status(400).json({ message: t('cannotDeletePublished', req) })
     return
   }
 
   // Permanently delete the draft
   await ArticleModel.findByIdAndDelete(id)
 
-  res.status(200).json({ message: 'Draft deleted successfully' })
+  res.status(200).json({ message: t('draftDeletedSuccessfully', req) })
 }
 
 /**
@@ -506,34 +590,34 @@ export async function duplicateToDraft(req: Request, res: Response): Promise<voi
   const { id } = req.params
 
   if (!req.user) {
-    res.status(401).json({ message: 'Unauthorized' })
+    res.status(401).json({ message: t('unauthorized', req) })
     return
   }
 
   if (!Types.ObjectId.isValid(id)) {
-    res.status(400).json({ message: 'Invalid article id' })
+    res.status(400).json({ message: t('invalidArticleId', req) })
     return
   }
 
   const article = await ArticleModel.findById(id)
   if (!article) {
-    res.status(404).json({ message: 'Article not found' })
+    res.status(404).json({ message: t('articleNotFound', req) })
     return
   }
 
   if (!article.author.equals(new Types.ObjectId(req.user.id))) {
-    res.status(403).json({ message: 'You do not have permission to duplicate this article' })
+    res.status(403).json({ message: t('noPermissionToDuplicate', req) })
     return
   }
 
   if (article.published === false) {
-    res.status(400).json({ message: 'Only published articles can be duplicated into drafts' })
+    res.status(400).json({ message: t('onlyPublishedCanDuplicate', req) })
     return
   }
 
   let ancestors: Types.ObjectId[] = []
   try {
-    ancestors = await resolveAncestors(article.parentId)
+    ancestors = await resolveAncestors(article.parentId, req)
   } catch (error) {
     res.status(400).json({ message: (error as Error).message })
     return
@@ -561,29 +645,29 @@ export async function deleteArticle(req: Request, res: Response): Promise<void> 
   const { id } = req.params
 
   if (!req.user) {
-    res.status(401).json({ message: 'Unauthorized' })
+    res.status(401).json({ message: t('unauthorized', req) })
     return
   }
 
   const isAdmin = isAdminUser(req)
   if (!isAdmin) {
-    res.status(403).json({ message: 'Forbidden' })
+    res.status(403).json({ message: t('forbidden', req) })
     return
   }
 
   if (!Types.ObjectId.isValid(id)) {
-    res.status(400).json({ message: 'Invalid article id' })
+    res.status(400).json({ message: t('invalidArticleId', req) })
     return
   }
 
   const article = await ArticleModel.findById(id)
   if (!article) {
-    res.status(404).json({ message: 'Article not found' })
+    res.status(404).json({ message: t('articleNotFound', req) })
     return
   }
 
   if (article.deleted) {
-    res.status(200).json({ message: 'Article already deleted', deletedCount: 0 })
+    res.status(200).json({ message: t('articleAlreadyDeleted', req), deletedCount: 0 })
     return
   }
 
@@ -601,7 +685,7 @@ export async function deleteArticle(req: Request, res: Response): Promise<void> 
     { $set: deleteUpdate }
   )
 
-  res.status(200).json({ message: 'Article deleted', deletedCount: result.modifiedCount ?? 0 })
+  res.status(200).json({ message: t('articleDeleted', req), deletedCount: result.modifiedCount ?? 0 })
 }
 
 /**
@@ -612,37 +696,37 @@ export async function exportArticle(req: Request, res: Response): Promise<void> 
   const { id } = req.params
 
   if (!req.user) {
-    res.status(401).json({ message: 'Unauthorized' })
+    res.status(401).json({ message: t('unauthorized', req) })
     return
   }
 
   if (!Types.ObjectId.isValid(id)) {
-    res.status(400).json({ message: 'Invalid article id' })
+    res.status(400).json({ message: t('invalidArticleId', req) })
     return
   }
 
   const article = await ArticleModel.findById(id).populate('author', 'name email readingPreferences roles')
   if (!article) {
-    res.status(404).json({ message: 'Article not found' })
+    res.status(404).json({ message: t('articleNotFound', req) })
     return
   }
 
   if (article.deleted) {
-    res.status(404).json({ message: 'Article not found' })
+    res.status(404).json({ message: t('articleNotFound', req) })
     return
   }
 
   const isAuthor = article.author.equals(new Types.ObjectId(req.user.id))
   const isAdmin = req.user.roles?.includes('admin')
   if (!isAuthor && !isAdmin) {
-    res.status(403).json({ message: 'You do not have permission to export this article' })
+    res.status(403).json({ message: t('noPermissionToExport', req) })
     return
   }
 
   const author = article.author as unknown as { name?: string; readingPreferences?: any }
   const { filename, html } = buildArticleExportHtml({
     article,
-    authorName: author?.name ?? 'Unknown',
+    authorName: article.authorName || author?.name || 'Unknown',
     prefs: author?.readingPreferences
   })
 
@@ -653,13 +737,13 @@ export async function exportArticle(req: Request, res: Response): Promise<void> 
 
 export async function getDeletedArticles(req: Request, res: Response): Promise<void> {
   if (!req.user) {
-    res.status(401).json({ message: 'Unauthorized' })
+    res.status(401).json({ message: t('unauthorized', req) })
     return
   }
 
   const isAdmin = isAdminUser(req)
   if (!isAdmin) {
-    res.status(403).json({ message: 'Forbidden - admin only' })
+    res.status(403).json({ message: t('forbiddenAdminOnly', req) })
     return
   }
 
@@ -715,29 +799,29 @@ export async function undeleteArticle(req: Request, res: Response): Promise<void
   const { restoreChildren } = req.query
 
   if (!req.user) {
-    res.status(401).json({ message: 'Unauthorized' })
+    res.status(401).json({ message: t('unauthorized', req) })
     return
   }
 
   const isAdmin = isAdminUser(req)
   if (!isAdmin) {
-    res.status(403).json({ message: 'Forbidden - admin only' })
+    res.status(403).json({ message: t('forbiddenAdminOnly', req) })
     return
   }
 
   if (!Types.ObjectId.isValid(id)) {
-    res.status(400).json({ message: 'Invalid article id' })
+    res.status(400).json({ message: t('invalidArticleId', req) })
     return
   }
 
   const article = await ArticleModel.findById(id)
   if (!article) {
-    res.status(404).json({ message: 'Article not found' })
+    res.status(404).json({ message: t('articleNotFound', req) })
     return
   }
 
   if (!article.deleted) {
-    res.status(400).json({ message: 'Article is not deleted' })
+    res.status(400).json({ message: t('articleNotDeleted', req) })
     return
   }
 
@@ -804,7 +888,7 @@ export async function undeleteArticle(req: Request, res: Response): Promise<void
     res.status(200).json(formatArticle(updatedArticle as any))
   } catch (error) {
     console.error(`[undelete] Error restoring article ${id}:`, error)
-    res.status(500).json({ message: 'Error restoring article' })
+    res.status(500).json({ message: t('errorRestoringArticle', req) })
   }
 }
 
@@ -812,32 +896,110 @@ export async function permanentlyDeleteArticle(req: Request, res: Response): Pro
   const { id } = req.params
 
   if (!req.user) {
-    res.status(401).json({ message: 'Unauthorized' })
+    res.status(401).json({ message: t('unauthorized', req) })
     return
   }
 
   const isAdmin = isAdminUser(req)
   if (!isAdmin) {
-    res.status(403).json({ message: 'Forbidden - admin only' })
+    res.status(403).json({ message: t('forbiddenAdminOnly', req) })
     return
   }
 
   if (!Types.ObjectId.isValid(id)) {
-    res.status(400).json({ message: 'Invalid article id' })
+    res.status(400).json({ message: t('invalidArticleId', req) })
     return
   }
 
   const article = await ArticleModel.findById(id)
   if (!article) {
-    res.status(404).json({ message: 'Article not found' })
+    res.status(404).json({ message: t('articleNotFound', req) })
     return
   }
 
   if (!article.deleted) {
-    res.status(400).json({ message: 'Article must be deleted (soft delete) before permanent deletion' })
+    res.status(400).json({ message: t('articleMustBeDeletedFirst', req) })
     return
   }
 
   await ArticleModel.findByIdAndDelete(id)
-  res.status(200).json({ message: 'Article permanently deleted' })
+  res.status(200).json({ message: t('articlePermanentlyDeleted', req) })
+}
+
+/**
+ * Get recent articles across all topics for dashboard
+ * Returns the most recent published root articles
+ */
+export async function getRecentArticles(req: Request, res: Response): Promise<void> {
+  const limit = parseInt(req.query.limit as string) || 6
+  const isAdmin = isAdminUser(req)
+
+  const filters: Record<string, unknown>[] = [
+    { parentId: null }, // Only root articles
+    { deleted: { $ne: true } }
+  ]
+
+  if (!isAdmin) {
+    filters.push({ published: true })
+  }
+
+  const articles = await ArticleModel.find({ $and: filters })
+    .sort({ publishedAt: -1, createdAt: -1 })
+    .limit(limit)
+    .populate('author', 'name email')
+
+  res.status(200).json({ articles: articles.map(formatArticle) })
+}
+
+/**
+ * Get topic statistics for dashboard
+ * Returns article counts and latest activity per topic
+ */
+export async function getTopicStatistics(req: Request, res: Response): Promise<void> {
+  const isAdmin = isAdminUser(req)
+  
+  const matchConditions: any = {
+    parentId: null, // Only count root articles
+    deleted: { $ne: true }
+  }
+
+  if (!isAdmin) {
+    matchConditions.published = true
+  }
+
+  const stats = await ArticleModel.aggregate([
+    { $match: matchConditions },
+    {
+      $group: {
+        _id: '$topicId',
+        totalArticles: { $sum: 1 },
+        latestArticle: { $max: '$publishedAt' },
+        latestUpdate: { $max: '$updatedAt' }
+      }
+    }
+  ])
+
+  // Get latest articles for each topic
+  const topicArticles = await Promise.all(
+    stats.map(async (stat) => {
+      if (!stat._id) return { ...stat, _id: null, latestArticles: [] }
+      
+      const latest = await ArticleModel.find({
+        topicId: stat._id,
+        parentId: null,
+        deleted: { $ne: true },
+        ...(isAdmin ? {} : { published: true })
+      })
+        .sort({ publishedAt: -1, updatedAt: -1 })
+        .limit(3)
+        .populate('author', 'name email')
+
+      return {
+        ...stat,
+        latestArticles: latest.map(formatArticle)
+      }
+    })
+  )
+
+  res.status(200).json({ statistics: topicArticles })
 }

@@ -3,7 +3,9 @@ import HomeView from '../views/HomeView.vue'
 import ArticleView from '../views/ArticleView.vue'
 import EditorView from '../views/EditorView.vue'
 import DraftsView from '../views/DraftsView.vue'
+import TopicView from '../views/TopicView.vue'
 import AdminArticlesView from '../views/AdminArticlesView.vue'
+import AdminTopicsView from '../views/AdminTopicsView.vue'
 import LoginView from '../views/LoginView.vue'
 import SignupView from '../views/SignupView.vue'
 import VerifyEmailView from '../views/VerifyEmailView.vue'
@@ -18,6 +20,11 @@ const router = createRouter({
       component: HomeView
     },
     {
+      path: '/topic/:id',
+      name: 'topic',
+      component: TopicView
+    },
+    {
       path: '/drafts',
       name: 'drafts',
       component: DraftsView,
@@ -28,6 +35,12 @@ const router = createRouter({
       name: 'admin-articles',
       component: AdminArticlesView,
       meta: { requiresAuth: true, requiresAdmin: true }
+    },
+    {
+      path: '/admin/topics',
+      name: 'admin-topics',
+      component: AdminTopicsView,
+      meta: { requiresAuth: true, requiresEditor: true }
     },
     {
       path: '/editor/:id?',
@@ -72,6 +85,10 @@ router.beforeEach(async to => {
   }
 
   if (to.meta.requiresAdmin && !auth.hasRole('admin')) {
+    return { name: 'home' }
+  }
+
+  if (to.meta.requiresEditor && !auth.hasRole('editor') && !auth.hasRole('admin')) {
     return { name: 'home' }
   }
 

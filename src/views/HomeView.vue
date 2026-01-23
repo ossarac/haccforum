@@ -1,272 +1,78 @@
 <script setup lang="ts">
-import { onMounted, computed, ref, h, defineComponent } from 'vue'
+import { onMounted, computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useArticleStore, type Article } from '../stores/articleStore'
+import { useTopicStore } from '../stores/topicStore'
 import { useAuthStore } from '../stores/authStore'
-import { PenTool, Plus, Grid3x3, List, ChevronRight, ChevronDown, MessageSquare, Trash2 } from 'lucide-vue-next'
-import { ApiError } from '../api/client'
-import Dialog from '../components/Dialog.vue'
-
-// Recursive Tree Node Component
-const TreeNode: any = defineComponent({
-  name: 'TreeNode',
-  props: {
-    article: { type: Object, required: true },
-    level: { type: Number, required: true },
-    expandedNodes: { type: Set, required: true },
-    canDelete: { type: Boolean, required: true },
-    deletingId: { type: String, default: null }
-  },
-  emits: ['toggle', 'view', 'delete'],
-  setup(props, { emit }) {
-    const router = useRouter()
-    
-    const handleToggle = (e: Event, nodeId: string) => {
-      e.stopPropagation()
-      emit('toggle', nodeId)
-    }
-
-    const handleView = (id: string) => {
-      router.push(`/article/${id}`)
-    }
-
-    const handleDelete = (e: Event, id: string) => {
-      e.stopPropagation()
-      emit('delete', id)
-    }
-
-    const formatDateTime = (iso: string) => {
-      const date = new Date(iso)
-      return date.toLocaleString('en-US', { 
-        month: 'short', 
-        day: 'numeric', 
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      })
-    }
-
-    const getReplyCount = (article: any): number => {
-      let count = article.children?.length || 0
-      article.children?.forEach((child: any) => {
-        count += getReplyCount(child)
-      })
-      return count
-    }
-
-    return () => {
-      const article = props.article as any
-      const hasChildren = article.children && article.children.length > 0
-      const isExpanded = props.expandedNodes.has(article.id)
-      const replyCount = getReplyCount(article)
-
-      return h('div', { class: 'tree-node' }, [
-        // Node content
-        h('div', { 
-          class: ['tree-node-content', `level-${props.level}`],
-          onClick: () => handleView(article.id)
-        }, [
-          // Expand/collapse button or spacer
-          hasChildren 
-            ? h('button', {
-                class: 'expand-btn',
-                onClick: (e: Event) => handleToggle(e, article.id)
-              }, [
-                isExpanded 
-                  ? h(ChevronDown, { size: 14 })
-                  : h(ChevronRight, { size: 14 })
-              ])
-            : h('span', { class: 'expand-spacer' }),
-
-          // Article info
-          h('div', { class: 'node-info' }, [
-            h('div', { class: 'node-header' }, [
-              h('span', { class: 'node-title' }, article.title),
-              hasChildren && h('span', { class: 'reply-badge' }, [
-                h(MessageSquare, { size: 14 }),
-                h('span', {}, String(replyCount))
-              ]),
-              props.canDelete && h('button', {
-                class: 'node-delete-btn',
-                disabled: props.deletingId === article.id,
-                onClick: (e: Event) => handleDelete(e, article.id)
-              }, [
-                h(Trash2, { size: 14, color: '#b91c1c', strokeWidth: 2.25 })
-              ])
-            ]),
-            h('div', { class: 'node-meta' }, [
-              h('span', { class: 'node-author' }, article.authorName || article.author.name),
-              h('span', { class: 'node-dot' }, '•'),
-              h('span', { class: 'node-date' }, formatDateTime(article.createdAt))
-            ])
-          ])
-        ]),
-
-        // Children (if expanded)
-        hasChildren && isExpanded && h('div', { class: 'tree-children' },
-          article.children.map((child: any) =>
-            h(TreeNode, {
-              key: child.id,
-              article: child,
-              level: props.level + 1,
-              expandedNodes: props.expandedNodes,
-              canDelete: props.canDelete,
-              deletingId: props.deletingId,
-              onToggle: (id: string) => emit('toggle', id),
-              onView: (id: string) => emit('view', id),
-              onDelete: (id: string) => emit('delete', id)
-            })
-          )
-        )
-      ])
-    }
-  }
-})
+import { Plus, ChevronRight, Clock, MessageSquare, TrendingUp } from 'lucide-vue-next'
 
 const router = useRouter()
+const { t } = useI18n()
 const articleStore = useArticleStore()
+const topicStore = useTopicStore()
 const authStore = useAuthStore()
 
-const rootArticles = computed(() => {
-  const articles = articleStore.getChildren(null)
-  // Sort by latest activity (including replies)
-  return [...articles].filter((a): a is Article => !!a).sort((a, b) => {
-    const aLatest = getLatestActivityDate(a.id)
-    const bLatest = getLatestActivityDate(b.id)
-    return bLatest - aLatest
-  })
-})
-const allArticles = computed(() => articleStore.allArticles)
-const isLoading = computed(() => articleStore.loadingStates['root'] ?? false)
-
-// Dialog state
-const dialogOpen = ref(false)
-const dialogTitle = ref('')
-const dialogMessage = ref('')
-const dialogType = ref<'alert' | 'confirm' | 'input'>('alert')
-const dialogResolve = ref<((value: boolean) => void) | null>(null)
+const recentArticles = ref<Article[]>([])
+const topicStats = ref<Array<{
+  _id: string | null
+  totalArticles: number
+  latestArticle: string | null
+  latestUpdate: string
+  latestArticles: Article[]
+}>>([])
+const isLoading = ref(true)
 const canEdit = computed(() => authStore.isAuthenticated)
-const isAdmin = computed(() => authStore.hasRole('admin'))
-const deletingId = ref<string | null>(null)
-
-// Get the latest activity date for an article (including all descendant replies)
-const getLatestActivityDate = (articleId: string): number => {
-  const article = articleStore.allArticles.find(a => a.id === articleId)
-  if (!article) return 0
-  
-  let latestDate = new Date(article.updatedAt).getTime()
-  
-  // Check all descendants recursively
-  const checkDescendants = (id: string) => {
-    const children = articleStore.getChildren(id)
-    children.forEach(child => {
-      if (!child) return
-      const childDate = new Date(child.updatedAt).getTime()
-      if (childDate > latestDate) {
-        latestDate = childDate
-      }
-      checkDescendants(child.id)
-    })
-  }
-  
-  checkDescendants(articleId)
-  return latestDate
-}
-
-const VIEW_MODE_KEY = 'haccedit_view_mode'
-const EXPANDED_NODES_KEY = 'haccedit_expanded_nodes'
-const savedViewMode = localStorage.getItem(VIEW_MODE_KEY) as 'grid' | 'tree' | null
-const viewMode = ref<'grid' | 'tree'>(savedViewMode || 'grid')
-
-// Auto-expand first level by default
-const savedExpanded = localStorage.getItem(EXPANDED_NODES_KEY)
-const initialExpanded = savedExpanded ? new Set<string>(JSON.parse(savedExpanded)) : new Set<string>()
-const expandedNodes = ref<Set<string>>(initialExpanded)
 
 onMounted(async () => {
   try {
-    await articleStore.fetchByParent(null)
-    // If tree view is active, load all articles
-    if (viewMode.value === 'tree' && allArticles.value.length === rootArticles.value.length) {
-      for (const article of rootArticles.value) {
-        if (article) {
-          await articleStore.fetchByParent(article.id)
-        }
-      }
-      
-      // Auto-expand first level if no saved state
-      if (!savedExpanded && rootArticles.value.length > 0) {
-        rootArticles.value.forEach(article => {
-          if (article) {
-            expandedNodes.value.add(article.id)
-          }
-        })
-      }
-    }
+    await Promise.all([
+      topicStore.fetchTopics(),
+      loadDashboardData()
+    ])
   } catch (error) {
-    console.error('[home] failed to load articles', error)
+    console.error('[home] failed to load dashboard', error)
+  } finally {
+    isLoading.value = false
   }
 })
 
-// Build tree structure from all articles
-const buildTree = () => {
-  type ArticleWithChildren = Article & { children: ArticleWithChildren[] }
-  
-  const articleMap = new Map<string, ArticleWithChildren>()
-  const roots: ArticleWithChildren[] = []
-
-  allArticles.value.forEach(article => {
-    articleMap.set(article.id, { ...article, children: [] })
-  })
-
-  allArticles.value.forEach(article => {
-    const node = articleMap.get(article.id)!
-    if (article.parentId) {
-      const parent = articleMap.get(article.parentId)
-      if (parent) {
-        parent.children.push(node)
-      }
-    } else {
-      roots.push(node)
-    }
-  })
-
-  // Sort by latest activity date (including all descendant replies)
-  const sortByLatestActivity = (a: Article, b: Article) => {
-    const aLatest = getLatestActivityDate(a.id)
-    const bLatest = getLatestActivityDate(b.id)
-    return bLatest - aLatest
-  }
-  
-  roots.sort(sortByLatestActivity)
-  roots.forEach(root => {
-    const sortChildren = (node: ArticleWithChildren): void => {
-      node.children.sort(sortByLatestActivity)
-      node.children.forEach(sortChildren)
-    }
-    sortChildren(root)
-  })
-
-  return roots
+const loadDashboardData = async () => {
+  const [recent, stats] = await Promise.all([
+    articleStore.fetchRecentArticles(6),
+    articleStore.fetchTopicStatistics()
+  ])
+  recentArticles.value = recent
+  topicStats.value = stats
 }
 
-const articleTree = computed(() => buildTree())
-
-const formatDate = (iso: string) => new Date(iso).toLocaleDateString()
-
-// Count all replies (descendants) for an article
-const getReplyCount = (articleId: string): number => {
-  const children = articleStore.getChildren(articleId)
-  let count = children.length
-  children.forEach(child => {
-    if (!child) return
-    count += getReplyCount(child.id)
-  })
-  return count
+const getTopicById = (id: string | null) => {
+  if (!id) return null
+  return topicStore.getTopic(id)
 }
+
+const getTopicWithStats = computed(() => {
+  return topicStats.value
+    .filter(stat => stat._id !== null)
+    .map(stat => ({
+      topic: getTopicById(stat._id),
+      stats: stat
+    }))
+    .filter(item => item.topic !== undefined)
+    .sort((a, b) => {
+      // Sort by latest activity
+      const aTime = new Date(a.stats.latestUpdate).getTime()
+      const bTime = new Date(b.stats.latestUpdate).getTime()
+      return bTime - aTime
+    })
+})
 
 const viewArticle = (id: string) => {
   router.push(`/article/${id}`)
+}
+
+const viewTopic = (topicId: string) => {
+  router.push(`/topic/${topicId}`)
 }
 
 const createArticle = () => {
@@ -277,653 +83,645 @@ const createArticle = () => {
   router.push('/editor')
 }
 
-const toggleViewMode = async () => {
-  const newMode = viewMode.value === 'grid' ? 'tree' : 'grid'
+const formatTimeAgo = (iso: string) => {
+  const date = new Date(iso)
+  const now = new Date()
+  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000)
   
-  if (newMode === 'tree' && allArticles.value.length === rootArticles.value.length) {
-    try {
-      for (const article of rootArticles.value) {
-        if (article) {
-          await articleStore.fetchByParent(article.id)
-        }
-      }
-    } catch (error) {
-      console.error('[home] failed to load tree data', error)
-    }
-  }
+  if (seconds < 60) return 'just now'
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`
+  if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`
   
-  viewMode.value = newMode
-  localStorage.setItem(VIEW_MODE_KEY, newMode)
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-const toggleNode = (nodeId: string) => {
-  if (expandedNodes.value.has(nodeId)) {
-    expandedNodes.value.delete(nodeId)
-  } else {
-    expandedNodes.value.add(nodeId)
-  }
-  // Force reactivity
-  expandedNodes.value = new Set(expandedNodes.value)
-  // Save to localStorage
-  localStorage.setItem(EXPANDED_NODES_KEY, JSON.stringify(Array.from(expandedNodes.value)))
-}
-
-const deleteArticle = async (id: string) => {
-  if (!isAdmin.value) return
-  const confirmed = await showConfirm('Confirm Delete', 'Delete this article and all of its replies? This can only be undone by an admin.')
-  if (!confirmed) return
-
-  deletingId.value = id
-  try {
-    await articleStore.deleteArticle(id)
-  } catch (error) {
-    console.error('[home] failed to delete article', error)
-    const message = error instanceof ApiError ? error.message : 'Failed to delete article. Please try again.'
-    showAlert('Error', message)
-  } finally {
-    deletingId.value = null
-  }
-}
-
-const showAlert = (title: string, message: string) => {
-  dialogTitle.value = title
-  dialogMessage.value = message
-  dialogType.value = 'alert'
-  dialogOpen.value = true
-}
-
-const showConfirm = (title: string, message: string): Promise<boolean> => {
-  return new Promise((resolve) => {
-    dialogTitle.value = title
-    dialogMessage.value = message
-    dialogType.value = 'confirm'
-    dialogResolve.value = resolve
-    dialogOpen.value = true
-  })
-}
-
-const handleDialogConfirm = () => {
-  if (dialogResolve.value) {
-    dialogResolve.value(true)
-    dialogResolve.value = null
-  }
-  dialogOpen.value = false
-}
-
-const handleDialogCancel = () => {
-  if (dialogResolve.value) {
-    dialogResolve.value(false)
-    dialogResolve.value = null
-  }
-  dialogOpen.value = false
+const getTopicColor = (topicId: string) => {
+  // Generate consistent but subtle colors for topics
+  const colors = [
+    '#64748b', // slate
+    '#6366f1', // indigo
+    '#8b5cf6', // purple
+    '#ec4899', // pink
+    '#f43f5e', // rose
+    '#f59e0b', // amber
+    '#10b981', // emerald
+    '#06b6d4', // cyan
+  ]
+  
+  const index = topicId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % colors.length
+  return colors[index]
 }
 </script>
 
 <template>
-  <div class="container home-view">
-    <div class="header-section">
-      <div>
-        <h1 class="page-title">Articles</h1>
-        <p class="page-subtitle">Browse and explore hierarchical discussions</p>
+  <div class="home-container">
+    <div class="home-header">
+      <div class="header-content">
+        <h1 class="main-title">{{ t('home.title') }}</h1>
+        <p class="main-subtitle">{{ t('home.subtitle') }}</p>
       </div>
-      <div class="header-actions flex-row gap-2">
-        <button 
-          class="view-toggle flex-row gap-2" 
-          @click="toggleViewMode"
-          :title="viewMode === 'grid' ? 'Switch to Tree View' : 'Switch to Grid View'"
-        >
-          <Grid3x3 v-if="viewMode === 'tree'" :size="18" />
-          <List v-else :size="18" />
-          <span class="desktop-only">{{ viewMode === 'grid' ? 'Tree' : 'Grid' }}</span>
-        </button>
-        <button v-if="canEdit" class="primary flex-row gap-2" @click="createArticle">
-          <Plus :size="20" />
-          New Article
-        </button>
-        <button v-else class="primary flex-row gap-2" @click="createArticle">
-          <PenTool :size="20" />
-          Sign in to Write
-        </button>
-      </div>
-    </div>
-
-    <div v-if="isLoading" class="loading-state">
-      <p>Loading articles...</p>
-    </div>
-
-    <div v-else-if="rootArticles.length === 0" class="empty-state">
-      <div class="empty-icon">📝</div>
-      <h2>No articles yet</h2>
-      <p>Be the first to create an article!</p>
-      <button class="primary" @click="createArticle">
-        Create Article
+      <button v-if="canEdit" class="cta-button" @click="createArticle">
+        <Plus :size="20" />
+        <span>{{ t('home.newArticle') }}</span>
+      </button>
+      <button v-else class="cta-button secondary" @click="createArticle">
+        <span>{{ t('home.signInToContribute') }}</span>
       </button>
     </div>
 
-    <!-- Grid View -->
-    <div v-else-if="viewMode === 'grid'" class="articles-grid">
-      <article
-        v-for="article in rootArticles"
-        :key="article?.id"
-        class="article-card"
-        @click="article && viewArticle(article.id)"
-      >
-        <div v-if="isAdmin" class="card-actions">
-          <button
-            class="delete-icon-btn"
-            :disabled="deletingId === article?.id"
-            @click.stop="article && deleteArticle(article.id)"
-            title="Delete article"
-            aria-label="Delete article"
-          >
-            <Trash2 :size="20" stroke="#b91c1c" :stroke-width="2" />
-          </button>
-        </div>
-        <h2 class="article-title">{{ article?.title }}</h2>
-        <div class="article-preview">
-          {{ article?.content.replace(/<[^>]*>/g, '').substring(0, 200) }}...
-        </div>
-        <div class="article-footer">
-          <div class="footer-left">
-            <span class="author">{{ article?.authorName || article?.author.name }}</span>
-            <span class="date">{{ article && formatDate(article.createdAt) }}</span>
-          </div>
-          <div v-if="article && getReplyCount(article.id) > 0" class="reply-count">
-            <MessageSquare :size="14" />
-            <span>{{ getReplyCount(article.id) }}</span>
-          </div>
-        </div>
-      </article>
+    <div v-if="isLoading" class="loading-section">
+      <div class="loading-spinner"></div>
+      <p>{{ t('home.loadingContent') }}</p>
     </div>
 
-    <!-- Tree View -->
-    <div v-else class="tree-view">
-      <TreeNode 
-        v-for="article in articleTree" 
-        :key="article.id"
-        :article="article"
-        :level="0"
-        :expanded-nodes="expandedNodes"
-        :can-delete="isAdmin"
-        :deleting-id="deletingId"
-        @toggle="toggleNode"
-        @view="viewArticle"
-        @delete="deleteArticle"
-      />
+    <div v-else class="home-content">
+      <!-- Recent Activity Section -->
+      <section class="recent-section" v-if="recentArticles.length > 0">
+        <div class="section-header">
+          <div class="section-title-group">
+            <TrendingUp :size="20" class="section-icon" />
+            <h2 class="section-title">{{ t('home.recentActivity') }}</h2>
+          </div>
+          <p class="section-subtitle">{{ t('home.latestArticles') }}</p>
+        </div>
+        
+        <div class="recent-articles-scroll">
+          <article 
+            v-for="article in recentArticles" 
+            :key="article.id"
+            class="recent-card"
+            @click="viewArticle(article.id)"
+          >
+            <div class="recent-card-topic" v-if="article.topicId">
+              <span 
+                class="topic-indicator"
+                :style="{ backgroundColor: getTopicColor(article.topicId) }"
+              ></span>
+              <span class="topic-name">{{ getTopicById(article.topicId)?.name }}</span>
+            </div>
+            <h3 class="recent-card-title">{{ article.title }}</h3>
+            <div class="recent-card-meta">
+              <span class="recent-author">{{ article.authorName || article.author.name }}</span>
+              <span class="meta-dot">·</span>
+              <span class="recent-time">{{ formatTimeAgo(article.publishedAt || article.createdAt) }}</span>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- Topics Section -->
+      <section class="topics-section">
+        <div class="section-header">
+          <div class="section-title-group">
+            <h2 class="section-title">{{ t('home.topics') }}</h2>
+          </div>
+          <p class="section-subtitle">{{ t('home.browseBySubject') }}</p>
+        </div>
+
+        <div v-if="getTopicWithStats.length === 0" class="empty-topics">
+          <p>{{ t('home.noTopicsYet') }}</p>
+        </div>
+
+        <div v-else class="topics-grid">
+          <div 
+            v-for="{ topic, stats } in getTopicWithStats" 
+            :key="topic!.id"
+            class="topic-card"
+            @click="viewTopic(topic!.id)"
+          >
+            <div class="topic-card-header">
+              <div class="topic-title-row">
+                <span 
+                  class="topic-color-bar"
+                  :style="{ backgroundColor: getTopicColor(topic!.id) }"
+                ></span>
+                <h3 class="topic-card-title">{{ topic!.name }}</h3>
+              </div>
+              <div class="topic-stats-row">
+                <div class="stat-badge">
+                  <MessageSquare :size="14" />
+                  <span>{{ stats.totalArticles }}</span>
+                </div>
+                <div class="stat-badge subtle">
+                  <Clock :size="14" />
+                  <span>{{ formatTimeAgo(stats.latestUpdate) }}</span>
+                </div>
+              </div>
+            </div>
+
+            <p v-if="topic!.description" class="topic-description">
+              {{ topic!.description }}
+            </p>
+
+            <div class="topic-articles" v-if="stats.latestArticles.length > 0">
+              <div class="articles-label">{{ t('home.recent') }}</div>
+              <div 
+                v-for="article in stats.latestArticles.slice(0, 3)" 
+                :key="article.id"
+                class="topic-article-item"
+                @click.stop="viewArticle(article.id)"
+              >
+                <span class="article-bullet">→</span>
+                <span class="article-item-title">{{ article.title }}</span>
+                <span class="article-item-time">{{ formatTimeAgo(article.publishedAt || article.createdAt) }}</span>
+              </div>
+            </div>
+
+            <div class="topic-card-footer">
+              <span class="view-all-link">
+                {{ t('home.viewAllArticles') }}
+                <ChevronRight :size="16" />
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
   </div>
-
-  <!-- Alert Dialog -->
-  <Dialog
-    :is-open="dialogOpen"
-    :title="dialogTitle"
-    :message="dialogMessage"
-    :type="dialogType"
-    @confirm="handleDialogConfirm"
-    @cancel="handleDialogCancel"
-    @close="dialogOpen = false"
-  />
 </template>
 
 <style scoped>
-.home-view {
-  padding: 2rem 1rem;
-  max-width: 1200px;
+.home-container {
+  max-width: 1400px;
   margin: 0 auto;
+  padding: 2rem 1.5rem;
+  min-height: 100vh;
 }
 
-.header-section {
+.home-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 2rem;
+  margin-bottom: 3rem;
+  padding-bottom: 2rem;
+  border-bottom: 1px solid var(--border-color);
   gap: 2rem;
 }
 
-.header-actions {
-  display: flex;
-  flex-shrink: 0;
+.header-content {
+  flex: 1;
 }
 
-.view-toggle {
-  background: var(--surface-color);
-  border: 1px solid var(--border-color);
-  color: var(--text-color);
-  padding: 0.5rem 1rem;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.view-toggle:hover {
-  border-color: var(--accent-color);
-  background: var(--bg-color);
-}
-
-.page-title {
-  font-size: 2.5rem;
+.main-title {
+  font-size: 2.75rem;
   font-weight: 800;
-  margin-bottom: 0.5rem;
+  margin: 0 0 0.5rem 0;
+  color: var(--text-color);
   font-family: var(--font-serif);
+  letter-spacing: -0.02em;
 }
 
-.page-subtitle {
+.main-subtitle {
+  font-size: 1.125rem;
   color: var(--text-secondary);
-  font-size: 1.1rem;
+  margin: 0;
+  line-height: 1.6;
+  max-width: 600px;
 }
 
-.loading-state,
-.empty-state {
-  text-align: center;
+.cta-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  background: var(--text-color);
+  color: var(--bg-color);
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.cta-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.cta-button.secondary {
+  background: var(--surface-color);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+}
+
+.loading-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   padding: 4rem 2rem;
   color: var(--text-secondary);
 }
 
-.empty-state {
-  background: var(--surface-color);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-}
-
-.empty-icon {
-  font-size: 4rem;
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border-color);
+  border-top-color: var(--accent-color);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
   margin-bottom: 1rem;
 }
 
-.empty-state h2 {
-  margin-bottom: 0.5rem;
-  color: var(--text-color);
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
-.empty-state p {
-  margin-bottom: 1.5rem;
+.home-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4rem;
 }
 
-.articles-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+/* Recent Activity Section */
+.recent-section {
+  display: flex;
+  flex-direction: column;
   gap: 1.5rem;
 }
 
-.article-card {
-  background: var(--surface-color);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 1.5rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  position: relative;
-}
-
-.article-card:hover {
-  border-color: var(--accent-color);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  transform: translateY(-2px);
-}
-
-.article-card .article-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  margin-bottom: 1rem;
-  color: var(--text-color);
-  font-family: var(--font-serif);
-  line-height: 1.3;
-}
-
-.card-actions {
-  position: absolute;
-  top: 0.75rem;
-  right: 0.75rem;
+.section-header {
   display: flex;
+  flex-direction: column;
   gap: 0.5rem;
 }
 
-.delete-icon-btn {
-  width: 40px;
-  height: 40px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid #fca5a5;
-  border-radius: var(--radius-sm);
-  background: #fff5f5;
-  color: #b91c1c;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  flex-shrink: 0;
-  padding: 0.5rem;
-}
-
-.delete-icon-btn svg {
-  stroke: #b91c1c !important;
-  color: #b91c1c !important;
-  width: 20px;
-  height: 20px;
-}
-
-.delete-icon-btn:hover {
-  background: #fee2e2;
-  border-color: #f87171;
-  transform: scale(1.05);
-}
-
-.delete-icon-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.article-preview {
-  color: var(--text-secondary);
-  line-height: 1.6;
-  margin-bottom: 1rem;
-  min-height: 3.2rem;
-}
-
-.article-footer {
+.section-title-group {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding-top: 1rem;
-  border-top: 1px solid var(--border-color);
-  font-size: 0.85rem;
+  gap: 0.75rem;
+}
+
+.section-icon {
   color: var(--text-secondary);
 }
 
-.footer-left {
-  display: flex;
-  gap: 0.75rem;
-  align-items: center;
-}
-
-.author {
-  font-weight: 600;
-}
-
-.reply-count {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  color: var(--accent-color);
-  font-weight: 600;
-}
-
-@media (max-width: 768px) {
-  .header-section {
-    flex-direction: column;
-  }
-
-  .header-actions {
-    width: 100%;
-    justify-content: space-between;
-  }
-
-  .articles-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* Tree View Styles */
-.tree-view {
-  background: var(--surface-color);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-}
-
-:deep(.tree-node) {
-  margin: 0;
-}
-
-:deep(.tree-node-content) {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-  padding: 1rem 1.25rem;
-  cursor: pointer;
-  transition: all 0.2s;
-  position: relative;
-  border-bottom: 1px solid transparent;
-}
-
-:deep(.tree-node-content:hover) {
-  background: color-mix(in srgb, var(--accent-color) 3%, var(--surface-color));
-  border-bottom-color: var(--border-color);
-}
-
-:deep(.tree-node-content::before) {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: transparent;
-  transition: background 0.2s;
-}
-
-:deep(.tree-node-content:hover::before) {
-  background: var(--accent-color);
-}
-
-/* Level-based indentation */
-:deep(.tree-node-content.level-0) {
-  padding-left: 1.25rem;
-}
-
-:deep(.tree-node-content.level-1) {
-  padding-left: 2.5rem;
-  background: color-mix(in srgb, var(--bg-color) 30%, var(--surface-color));
-}
-
-:deep(.tree-node-content.level-2) {
-  padding-left: 4rem;
-  background: color-mix(in srgb, var(--bg-color) 50%, var(--surface-color));
-}
-
-:deep(.tree-node-content.level-3) {
-  padding-left: 5.5rem;
-  background: color-mix(in srgb, var(--bg-color) 70%, var(--surface-color));
-}
-
-:deep(.tree-node-content.level-4) {
-  padding-left: 7rem;
-  background: var(--bg-color);
-}
-
-/* Expand/collapse button */
-:deep(.expand-btn) {
-  background: none;
-  border: none;
-  padding: 0.125rem;
-  margin-top: 0.25rem;
-  color: var(--text-secondary);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 3px;
-  flex-shrink: 0;
-  transition: all 0.15s;
-  opacity: 0.6;
-}
-
-:deep(.expand-btn:hover) {
-  background: var(--accent-color);
-  color: white;
-  opacity: 1;
-  transform: scale(1.1);
-}
-
-:deep(.expand-spacer) {
-  width: 18px;
-  flex-shrink: 0;
-}
-
-/* Node content */
-:deep(.node-info) {
-  flex: 1;
-  min-width: 0;
-}
-
-:deep(.node-header) {
-  display: flex;
-  align-items: baseline;
-  gap: 0.75rem;
-  margin-bottom: 0.35rem;
-  flex-wrap: wrap;
-}
-
-:deep(.node-delete-btn) {
-  border: 1px solid #fca5a5;
-  background: #fff5f5;
-  color: #b91c1c;
-  border-radius: 6px;
-  padding: 0.2rem 0.45rem;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 32px;
-  min-height: 28px;
-  transition: all 0.15s ease;
-}
-
-:deep(.node-delete-btn:hover) {
-  background: #fee2e2;
-  border-color: #f87171;
-}
-
-:deep(.node-delete-btn:disabled) {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-:deep(.node-title) {
-  font-size: 1.05rem;
-  font-weight: 600;
-  color: var(--text-color);
-  line-height: 1.4;
-  flex: 1;
-  min-width: 200px;
-}
-
-:deep(.level-0 .node-title) {
-  font-size: 1.25rem;
+.section-title {
+  font-size: 1.75rem;
   font-weight: 700;
+  margin: 0;
   color: var(--text-color);
   font-family: var(--font-serif);
 }
 
-:deep(.level-1 .node-title) {
-  font-size: 1.1rem;
-  font-weight: 600;
-}
-
-:deep(.level-2 .node-title) {
-  font-size: 1rem;
-  font-weight: 500;
-}
-
-:deep(.level-3 .node-title),
-:deep(.level-4 .node-title) {
+.section-subtitle {
   font-size: 0.95rem;
-  font-weight: 500;
+  color: var(--text-secondary);
+  margin: 0;
+  padding-left: 2rem;
 }
 
-/* Reply badge */
-:deep(.reply-badge) {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.25rem 0.6rem;
-  background: var(--accent-color);
-  color: white;
+.recent-articles-scroll {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.25rem;
+  padding: 0.25rem;
+}
+
+.recent-card {
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
   border-radius: 12px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  flex-shrink: 0;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  padding: 1.25rem;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  position: relative;
+  overflow: hidden;
 }
 
-:deep(.level-0 .reply-badge) {
-  background: var(--accent-color);
+.recent-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, 
+    var(--accent-color) 0%, 
+    transparent 100%);
+  opacity: 0;
+  transition: opacity 0.25s ease;
 }
 
-:deep(.level-1 .reply-badge),
-:deep(.level-2 .reply-badge),
-:deep(.level-3 .reply-badge),
-:deep(.level-4 .reply-badge) {
-  background: var(--text-secondary);
-  font-size: 0.7rem;
-  padding: 0.2rem 0.5rem;
+.recent-card:hover::before {
+  opacity: 1;
 }
 
-/* Metadata */
-:deep(.node-meta) {
+.recent-card:hover {
+  border-color: color-mix(in srgb, var(--accent-color) 50%, var(--border-color));
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  transform: translateY(-3px);
+}
+
+.recent-card-topic {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   font-size: 0.8rem;
   color: var(--text-secondary);
-  opacity: 0.85;
 }
 
-:deep(.level-0 .node-meta) {
-  font-size: 0.85rem;
+.topic-indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex-shrink: 0;
 }
 
-:deep(.node-author) {
+.topic-name {
   font-weight: 600;
-  color: var(--text-color);
-  opacity: 0.7;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 0.75rem;
 }
 
-:deep(.node-dot) {
+.recent-card-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-color);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.recent-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-top: auto;
+  padding-top: 0.5rem;
+  border-top: 1px solid color-mix(in srgb, var(--border-color) 50%, transparent);
+}
+
+.recent-author {
+  font-weight: 500;
+  color: var(--text-color);
+}
+
+.meta-dot {
   opacity: 0.4;
   font-size: 0.7em;
 }
 
-:deep(.node-date) {
+.recent-time {
   font-variant-numeric: tabular-nums;
-  opacity: 0.8;
 }
 
-/* Thread lines */
-:deep(.tree-children) {
+/* Topics Section */
+.topics-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.empty-topics {
+  text-align: center;
+  padding: 3rem 2rem;
+  background: var(--surface-color);
+  border: 1px dashed var(--border-color);
+  border-radius: 12px;
+  color: var(--text-secondary);
+}
+
+.topics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 1.5rem;
+}
+
+.topic-card {
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1.5rem;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
   position: relative;
 }
 
-:deep(.tree-children::before) {
-  content: '';
-  position: absolute;
-  left: 2.25rem;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: linear-gradient(to bottom, 
-    var(--border-color) 0%, 
-    var(--border-color) 90%, 
-    transparent 100%);
-  opacity: 0.5;
+.topic-card:hover {
+  border-color: var(--text-secondary);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
 }
 
-:deep(.level-0 > .tree-children::before) {
-  background: linear-gradient(to bottom, 
-    var(--accent-color) 0%, 
-    color-mix(in srgb, var(--accent-color) 50%, var(--border-color)) 90%, 
-    transparent 100%);
-  opacity: 0.3;
+.topic-card-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
 }
 
-:deep(.level-1 > .tree-children::before) {
-  left: 3.75rem;
+.topic-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
 }
 
-:deep(.level-2 > .tree-children::before) {
-  left: 5.25rem;
+.topic-color-bar {
+  width: 4px;
+  height: 24px;
+  border-radius: 2px;
+  flex-shrink: 0;
 }
 
-:deep(.level-3 > .tree-children::before) {
-  left: 6.75rem;
+.topic-card-title {
+  font-size: 1.375rem;
+  font-weight: 700;
+  margin: 0;
+  color: var(--text-color);
+  font-family: var(--font-serif);
+  line-height: 1.3;
+}
+
+.topic-stats-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding-left: 1rem;
+}
+
+.stat-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.75rem;
+  background: var(--text-color);
+  color: var(--bg-color);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-badge.subtle {
+  background: var(--bg-color);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.topic-description {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin: 0;
+  padding-left: 1rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.topic-articles {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem;
+  background: var(--bg-color);
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 50%, transparent);
+}
+
+.articles-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  margin-bottom: 0.25rem;
+}
+
+.topic-article-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.5rem 0.5rem 0.5rem 0.25rem;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  font-size: 0.9rem;
+}
+
+.topic-article-item:hover {
+  background: var(--surface-color);
+  padding-left: 0.5rem;
+}
+
+.article-bullet {
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 0.85em;
+  flex-shrink: 0;
+}
+
+.article-item-title {
+  color: var(--text-color);
+  font-weight: 500;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.article-item-time {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.topic-card-footer {
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border-color);
+  margin-top: auto;
+}
+
+.view-all-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.topic-card:hover .view-all-link {
+  color: var(--text-color);
+  gap: 0.5rem;
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+  .topics-grid {
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .home-container {
+    padding: 1.5rem 1rem;
+  }
+
+  .home-header {
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .cta-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .main-title {
+    font-size: 2rem;
+  }
+
+  .main-subtitle {
+    font-size: 1rem;
+  }
+
+  .recent-articles-scroll {
+    grid-template-columns: 1fr;
+  }
+
+  .topics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .section-subtitle {
+    padding-left: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .main-title {
+    font-size: 1.75rem;
+  }
+
+  .section-title {
+    font-size: 1.5rem;
+  }
+
+  .topic-card-title {
+    font-size: 1.125rem;
+  }
 }
 </style>

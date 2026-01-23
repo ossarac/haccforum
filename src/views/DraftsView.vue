@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { onMounted, computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useArticleStore } from '../stores/articleStore'
 import { useAuthStore } from '../stores/authStore'
 import Dialog from '../components/Dialog.vue'
 import { Plus, Trash2 } from 'lucide-vue-next'
 
+const { t } = useI18n()
 const router = useRouter()
 const articleStore = useArticleStore()
 const auth = useAuthStore()
@@ -75,28 +77,28 @@ onMounted(async () => {
       <!-- Header -->
       <div class="header">
         <div class="header-content">
-          <h1>My Drafts</h1>
-          <p class="subtitle">Save and manage your unpublished articles</p>
+          <h1>{{ t('drafts.myDrafts') }}</h1>
+          <p class="subtitle">{{ t('drafts.saveAndManage') }}</p>
         </div>
         <button class="primary" @click="createNewDraft">
           <Plus :size="18" />
-          <span class="desktop-only">New Draft</span>
+          <span class="desktop-only">{{ t('drafts.newDraft') }}</span>
         </button>
       </div>
 
       <!-- Loading State -->
       <div v-if="isLoading" class="loading">
-        <p>Loading your drafts...</p>
+        <p>{{ t('drafts.loadingDrafts') }}</p>
       </div>
 
       <!-- Empty State -->
       <div v-else-if="drafts.length === 0" class="empty-state">
         <div class="empty-icon">📝</div>
-        <h2>No drafts yet</h2>
-        <p>Start writing a new article or save your work as a draft</p>
+        <h2>{{ t('drafts.noDrafts') }}</h2>
+        <p>{{ t('drafts.startWriting') }}</p>
         <button class="primary" @click="createNewDraft">
           <Plus :size="18" />
-          Create Your First Draft
+          {{ t('drafts.createFirstDraft') }}
         </button>
       </div>
 
@@ -105,9 +107,9 @@ onMounted(async () => {
         <div v-for="draft in drafts" :key="draft.id" class="draft-card">
           <div class="draft-header">
             <div class="draft-title-section">
-              <h3 class="draft-title">{{ draft.title || 'Untitled Draft' }}</h3>
+              <h3 class="draft-title">{{ draft.title || t('drafts.untitledDraft') }}</h3>
               <p class="draft-meta">
-                Last updated {{ formatDateTime(draft.updatedAt) }}
+                {{ t('drafts.lastUpdated') }} {{ formatDateTime(draft.updatedAt) }}
               </p>
             </div>
             <div class="draft-actions">
@@ -115,7 +117,7 @@ onMounted(async () => {
                 class="icon-btn delete-btn"
                 @click="openDeleteConfirm(draft.id)"
                 :disabled="deletingId === draft.id"
-                title="Delete draft permanently"
+                :title="t('drafts.deleteDraft')"
               >
                 <Trash2 :size="24" />
               </button>
@@ -130,7 +132,7 @@ onMounted(async () => {
           <!-- Action buttons -->
           <div class="draft-footer">
             <button class="secondary-btn" @click="editDraft(draft.id)">
-              Continue Editing
+              {{ t('drafts.continueEditing') }}
             </button>
           </div>
         </div>
@@ -141,10 +143,10 @@ onMounted(async () => {
   <Dialog
     :is-open="showDeleteConfirm"
     type="confirm"
-    title="Delete Draft"
-    message="Are you sure you want to permanently delete this draft? This action cannot be undone."
-    confirm-text="Delete"
-    cancel-text="Cancel"
+    :title="t('drafts.deleteDraft')"
+    :message="t('drafts.deleteConfirmation')"
+    :confirm-text="t('common.delete')"
+    :cancel-text="t('common.cancel')"
     @confirm="deleteDraftPermanently"
     @close="showDeleteConfirm = false"
   />

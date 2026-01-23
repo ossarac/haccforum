@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { apiRequest } from '../api/client'
 
+const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 
@@ -14,7 +16,7 @@ onMounted(async () => {
   const token = route.query.token as string
   
   if (!token) {
-    errorMessage.value = 'No verification token provided'
+    errorMessage.value = t('verify.noToken')
     isVerifying.value = false
     return
   }
@@ -27,7 +29,7 @@ onMounted(async () => {
     })
     success.value = true
   } catch (error: any) {
-    errorMessage.value = error.message || 'Verification failed'
+    errorMessage.value = error.message || t('verify.verificationError')
   } finally {
     isVerifying.value = false
   }
@@ -43,22 +45,22 @@ const goToHome = () => {
     <div class="verify-card">
       <div v-if="isVerifying" class="verify-state">
         <div class="spinner"></div>
-        <h2>Verifying your email...</h2>
-        <p>Please wait a moment</p>
+        <h2>{{ t('verify.verifyingEmail') }}</h2>
+        <p>{{ t('verify.pleaseWait') }}</p>
       </div>
 
       <div v-else-if="success" class="verify-state success">
         <div class="icon">✓</div>
-        <h2>Email Verified!</h2>
-        <p>Your email has been successfully verified. You can now enjoy full access to HaccForum.</p>
-        <button class="primary" @click="goToHome">Go to Home</button>
+        <h2>{{ t('verify.emailVerified') }}</h2>
+        <p>{{ t('verify.verificationSuccess') }}</p>
+        <button class="primary" @click="goToHome">{{ t('verify.goToHome') }}</button>
       </div>
 
       <div v-else class="verify-state error">
         <div class="icon">✗</div>
-        <h2>Verification Failed</h2>
+        <h2>{{ t('verify.verificationFailed') }}</h2>
         <p>{{ errorMessage }}</p>
-        <button class="primary" @click="goToHome">Go to Home</button>
+        <button class="primary" @click="goToHome">{{ t('verify.goToHome') }}</button>
       </div>
     </div>
   </div>

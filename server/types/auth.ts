@@ -12,5 +12,6 @@ export interface AuthUser {
   name: string
   roles: string[]
   emailVerified: boolean
+  language?: string
   readingPreferences?: ReadingPreferences
 }

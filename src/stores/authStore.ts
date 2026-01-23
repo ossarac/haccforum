@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { apiRequest, setApiToken } from '../api/client'
+import { setLanguage } from '../i18n'
 
 interface ReadingPreferences {
   backgroundId?: string
@@ -16,6 +17,7 @@ interface AuthUser {
   name: string
   roles: string[]
   emailVerified: boolean
+  language?: string
   readingPreferences?: ReadingPreferences
 }
 
@@ -44,6 +46,11 @@ export const useAuthStore = defineStore('auth', () => {
       user.value = value.user
       setApiToken(value.token)
       localStorage.setItem(TOKEN_KEY, value.token)
+      
+      // Set language from user preference
+      if (value.user.language) {
+        setLanguage(value.user.language)
+      }
     } else {
       token.value = null
       user.value = null
@@ -81,6 +88,12 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const response = await apiRequest<{ user: AuthUser }>('/auth/me')
       user.value = response.user
+      
+      // Set language from user preference
+      if (response.user.language) {
+        setLanguage(response.user.language)
+      }
+      
       return response.user
     } catch (error) {
       setSession(null)
@@ -105,6 +118,18 @@ export const useAuthStore = defineStore('auth', () => {
     return response.user
   }
 
+  const updateLanguagePreference = async (language: string) => {
+    const response = await apiRequest<{ user: AuthUser }>('/auth/language', {
+      method: 'PATCH',
+      body: JSON.stringify({ language })
+    })
+    if (user.value) {
+      user.value.language = response.user.language
+    }
+    setLanguage(language)
+    return response.user
+  }
+
   return {
     user,
     token,
@@ -115,6 +140,7 @@ export const useAuthStore = defineStore('auth', () => {
     register,
     loadSession,
     logout,
-    updateReadingPreferences
+    updateReadingPreferences,
+    updateLanguagePreference
   }
 })

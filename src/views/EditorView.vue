@@ -1,22 +1,27 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useArticleStore } from '../stores/articleStore'
+import { useTopicStore } from '../stores/topicStore'
 import { useAuthStore } from '../stores/authStore'
 import RichEditor from '../components/Editor/RichEditor.vue'
 import TocSidebar from '../components/Editor/TocSidebar.vue'
 import Dialog from '../components/Dialog.vue'
-import { Download, Eye, Edit, Save, User } from 'lucide-vue-next'
+import { Download, Eye, Edit, Save, User, ChevronUp, ChevronDown, List, X } from 'lucide-vue-next'
 
+const { t } = useI18n()
 const router = useRouter()
 const route = useRoute()
 const store = useArticleStore()
+const topicStore = useTopicStore()
 const auth = useAuthStore()
 
 const title = ref('')
 const authorName = ref('')
 const content = ref('')
 const parentId = ref<string | null>(null)
+const topicId = ref<string | null>(null)
 const isEditing = ref(false)
 const isPreviewMode = ref(false)
 const editorRef = ref<InstanceType<typeof RichEditor> | null>(null)
@@ -26,6 +31,8 @@ const errorMessage = ref('')
 const isDraft = ref(false)
 const isHeaderVisible = ref(true)
 const showFloatingButtons = ref(false)
+const showMobileToc = ref(false)
+const showMobileActions = ref(false)
 const headerRef = ref<HTMLElement | null>(null)
 let headerObserver: IntersectionObserver | null = null
 
@@ -34,9 +41,24 @@ const dialogOpen = ref(false)
 const dialogTitle = ref('')
 const dialogMessage = ref('')
 const dialogType = ref<'alert' | 'confirm' | 'input'>('alert')
+const pendingPublishCallback = ref<(() => void) | null>(null)
 
 const currentArticleId = computed(() => (route.params.id as string | undefined) ?? null)
 const currentArticle = computed(() => (currentArticleId.value ? store.getArticle(currentArticleId.value) : null))
+
+// Topic can be changed if: article is draft, OR user is admin
+const canChangeTopic = computed(() => {
+  // New articles can always change topic
+  if (!isEditing.value) return true
+  
+  // Drafts can change topic
+  if (isDraft.value) return true
+  
+  // Admins can change topic on published articles
+  if (auth.hasRole('admin')) return true
+  
+  return false
+})
 
 const loadArticle = async (id: string) => {
   try {
@@ -45,11 +67,12 @@ const loadArticle = async (id: string) => {
     authorName.value = article.authorName ?? ''
     content.value = article.content
     parentId.value = article.parentId
+    topicId.value = article.topicId
     isDraft.value = !article.published
     isEditing.value = true
   } catch (error) {
     console.error('[editor] failed to load article', error)
-    errorMessage.value = 'Unable to load article. Try refreshing.'
+    errorMessage.value = t('editor.unableToLoad')
   }
 }
 
@@ -63,6 +86,7 @@ const hydrateFromRoute = async () => {
       title.value = currentArticle.value.title
       content.value = currentArticle.value.content
       parentId.value = currentArticle.value.parentId
+      topicId.value = currentArticle.value.topicId
       isDraft.value = !currentArticle.value.published
       isEditing.value = true
     } else {
@@ -73,6 +97,7 @@ const hydrateFromRoute = async () => {
     title.value = ''
     content.value = ''
     parentId.value = null
+    topicId.value = null
     isDraft.value = false
   }
 
@@ -83,10 +108,12 @@ const hydrateFromRoute = async () => {
       const parentArticle = store.getArticle(parentId.value)
       if (parentArticle) {
         title.value = `Re: ${parentArticle.title}`
+        topicId.value = parentArticle.topicId
       } else {
         try {
           const parent = await store.fetchArticle(parentId.value)
           title.value = `Re: ${parent.title}`
+          topicId.value = parent.topicId
         } catch (error) {
           console.error('[editor] failed to load parent article', error)
           title.value = 'Re: '
@@ -94,10 +121,20 @@ const hydrateFromRoute = async () => {
       }
     }
   }
+
+  // Handle topicId query parameter for new articles
+  if (route.query.topicId && !isEditing.value) {
+    topicId.value = route.query.topicId as string
+  }
 }
 
-onMounted(() => {
+onMounted(async () => {
   hydrateFromRoute()
+  
+  // Load topics for topic selector
+  if (topicStore.topics.length === 0) {
+    await topicStore.fetchTopics()
+  }
 
   // Hide floating buttons when header is in view
   headerObserver = new IntersectionObserver(
@@ -137,7 +174,7 @@ watch(
  */
 const saveDraft = async () => {
   if (!title.value.trim()) {
-    showAlert('Validation Error', 'Please enter a title')
+    showAlert(t('editor.validationError'), t('editor.pleaseEnterTitle'))
     return
   }
 
@@ -154,7 +191,8 @@ const saveDraft = async () => {
     authorName: authorName.value,
     title: title.value,
     content: content.value,
-    parentId: parentId.value || null
+    parentId: parentId.value || null,
+    topicId: topicId.value || null
   }
 
   try {
@@ -167,9 +205,9 @@ const saveDraft = async () => {
     }
   } catch (error) {
     console.error('[editor] failed to save draft', error)
-    const message = error instanceof Error ? error.message : 'Failed to save draft'
+    const message = error instanceof Error ? error.message : t('editor.failedToSaveDraft')
     errorMessage.value = message
-    showAlert('Save Error', message)
+    showAlert(t('editor.saveError'), message)
   } finally {
     isSaving.value = false
   }
@@ -181,7 +219,7 @@ const saveDraft = async () => {
  */
 const publish = async () => {
   if (!title.value.trim()) {
-    showAlert('Validation Error', 'Please enter a title')
+    showAlert(t('editor.validationError'), t('editor.pleaseEnterTitle'))
     return
   }
 
@@ -190,6 +228,21 @@ const publish = async () => {
     return
   }
 
+  // Show confirmation dialog with topic information
+  const topicName = topicId.value 
+    ? topicStore.flatTopicList.find(t => t.id === topicId.value)?.displayName || 'Unknown'
+    : t('editor.noTopic')
+  
+  showConfirm(
+    t('editor.publish'),
+    t('editor.confirmPublish') + `\n\n${t('editor.title')}: ${title.value}\n${t('editor.selectTopic')}: ${topicName}\n\n${t('editor.oncePublished')}`,
+    async () => {
+      await doPublish()
+    }
+  )
+}
+
+const doPublish = async () => {
   isPublishing.value = true
   errorMessage.value = ''
 
@@ -203,7 +256,8 @@ const publish = async () => {
         title: title.value,
         content: content.value,
         authorName: authorName.value,
-        parentId: parentId.value || null
+        parentId: parentId.value || null,
+        topicId: topicId.value || null
       })
       articleId = saved.id
     } else {
@@ -215,7 +269,8 @@ const publish = async () => {
           title: title.value,
           content: content.value,
           authorName: authorName.value,
-          parentId: parentId.value || null
+          parentId: parentId.value || null,
+          topicId: topicId.value || null
         })
       }
     }
@@ -231,9 +286,9 @@ const publish = async () => {
     }
   } catch (error) {
     console.error('[editor] failed to publish article', error)
-    const message = error instanceof Error ? error.message : 'Failed to publish article'
+    const message = error instanceof Error ? error.message : t('editor.failedToPublish')
     errorMessage.value = message
-    showAlert('Publish Error', message)
+    showAlert(t('editor.publishError'), message)
   } finally {
     isPublishing.value = false
   }
@@ -244,10 +299,39 @@ const showAlert = (title: string, message: string) => {
   dialogMessage.value = message
   dialogType.value = 'alert'
   dialogOpen.value = true
+  pendingPublishCallback.value = null
+}
+
+const showConfirm = (title: string, message: string, callback: () => void) => {
+  dialogTitle.value = title
+  dialogMessage.value = message
+  dialogType.value = 'confirm'
+  dialogOpen.value = true
+  pendingPublishCallback.value = callback
+}
+
+const handleDialogConfirm = () => {
+  if (pendingPublishCallback.value) {
+    pendingPublishCallback.value()
+    pendingPublishCallback.value = null
+  }
+}
+
+const handleDialogClose = () => {
+  dialogOpen.value = false
+  pendingPublishCallback.value = null
 }
 
 const togglePreview = () => {
   isPreviewMode.value = !isPreviewMode.value
+}
+
+const scrollToTop = () => {
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+const scrollToBottom = () => {
+  window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })
 }
 
 const exportHtml = () => {
@@ -330,6 +414,74 @@ const exportHtml = () => {
 </script>
 
 <template>
+  <!-- Backdrop for mobile TOC -->
+  <div
+    v-if="showMobileToc"
+    class="toc-backdrop mobile-only"
+    @click="showMobileToc = false"
+  ></div>
+
+  <!-- Mobile TOC Toggle Button (appears on narrow screens) -->
+  <button
+    class="mobile-toc-toggle mobile-only"
+    @click="showMobileToc = !showMobileToc"
+    :title="showMobileToc ? t('toc.close') : t('toc.open')"
+    :aria-label="showMobileToc ? t('toc.close') : t('toc.open')"
+  >
+    <X v-if="showMobileToc" :size="20" />
+    <List v-else :size="20" />
+  </button>
+
+  <!-- Mobile Actions Toggle Button (appears on narrow screens) -->
+  <button
+    class="mobile-actions-toggle mobile-only"
+    @click="showMobileActions = !showMobileActions"
+    :title="showMobileActions ? t('common.close') : t('editor.actions')"
+    :aria-label="showMobileActions ? t('common.close') : t('editor.actions')"
+  >
+    <X v-if="showMobileActions" :size="20" />
+    <ChevronUp v-else :size="20" />
+  </button>
+
+  <!-- Mobile Actions Panel -->
+  <div v-if="showMobileActions" class="mobile-actions-panel mobile-only">
+    <button
+      class="mobile-action-btn"
+      @click="togglePreview"
+      :title="isPreviewMode ? t('editor.editMode') : t('editor.previewMode')"
+    >
+      <Eye v-if="!isPreviewMode" :size="18" />
+      <Edit v-else :size="18" />
+      <span>{{ isPreviewMode ? t('editor.editMode') : t('editor.previewMode') }}</span>
+    </button>
+    <button
+      v-if="!isPreviewMode"
+      class="mobile-action-btn"
+      @click="saveDraft"
+      :disabled="isSaving || isPublishing"
+      :title="t('editor.saveDraft')"
+    >
+      <Save :size="18" />
+      <span>{{ isSaving ? t('editor.savingDraft') : t('editor.saveDraft')}}</span>
+    </button>
+    <button
+      class="mobile-action-btn"
+      @click="scrollToTop"
+      :title="t('common.goToTop')"
+    >
+      <ChevronUp :size="18" />
+      <span>{{ t('common.goToTop') }}</span>
+    </button>
+    <button
+      class="mobile-action-btn"
+      @click="scrollToBottom"
+      :title="t('common.goToBottom')"
+    >
+      <ChevronDown :size="18" />
+      <span>{{ t('common.goToBottom') }}</span>
+    </button>
+  </div>
+
   <button
     v-if="showFloatingButtons"
     class="floating-toggle"
@@ -339,7 +491,7 @@ const exportHtml = () => {
   >
     <Eye v-if="!isPreviewMode" :size="18" />
     <Edit v-else :size="18" />
-    <span class="desktop-only">{{ isPreviewMode ? 'Edit' : 'Preview' }}</span>
+    <span class="desktop-only">{{ isPreviewMode ? t('editor.editMode') : t('editor.previewMode') }}</span>
   </button>
 
   <button
@@ -351,7 +503,27 @@ const exportHtml = () => {
     aria-label="Save draft"
   >
     <Save :size="18" />
-    <span class="desktop-only">{{ isSaving ? 'Saving…' : 'Save Draft' }}</span>
+    <span class="desktop-only">{{ isSaving ? t('editor.savingDraft') : t('editor.saveDraft')}}</span>
+  </button>
+
+  <button
+    v-if="showFloatingButtons"
+    class="floating-scroll-top"
+    @click="scrollToTop"
+    title="Go to top"
+    aria-label="Go to top"
+  >
+    <ChevronUp :size="18" />
+  </button>
+
+  <button
+    v-if="showFloatingButtons"
+    class="floating-scroll-bottom"
+    @click="scrollToBottom"
+    title="Go to bottom"
+    aria-label="Go to bottom"
+  >
+    <ChevronDown :size="18" />
   </button>
 
   <div class="container mobile-padding">
@@ -361,7 +533,7 @@ const exportHtml = () => {
           <input 
             v-model="title" 
             type="text" 
-            placeholder="Article Title" 
+            :placeholder="t('editor.articleTitlePlaceholder')" 
             class="title-input"
             :disabled="isPreviewMode"
           />
@@ -370,19 +542,38 @@ const exportHtml = () => {
             <input 
               v-model="authorName" 
               type="text" 
-              placeholder="Author Name (Optional)" 
+              :placeholder="t('editor.authorNamePlaceholder')" 
               class="author-input"
               :disabled="isPreviewMode"
             />
           </div>
+          <!-- Topic selector - only for root articles -->
+          <div v-if="!parentId" class="topic-selector-container">
+            <label for="topic-select">{{ t('editor.selectTopic') }}:</label>
+            <select 
+              id="topic-select"
+              v-model="topicId" 
+              class="topic-select"
+              :disabled="isPreviewMode || !canChangeTopic"
+            >
+              <option value="">{{ t('editor.selectATopicPlaceholder') }}</option>
+              <option 
+                v-for="topic in topicStore.flatTopicList" 
+                :key="topic.id" 
+                :value="topic.id"
+              >
+                {{ topic.displayName }}
+              </option>
+            </select>
+          </div>
         </div>
         <div class="actions flex-row gap-2">
-          <button @click="togglePreview" class="icon-btn" :title="isPreviewMode ? 'Edit Mode' : 'Preview Mode'">
+          <button @click="togglePreview" class="icon-btn" :title="isPreviewMode ? t('editor.editMode') : t('editor.previewMode')">
             <Eye v-if="!isPreviewMode" :size="20" />
             <Edit v-else :size="20" />
-            <span class="desktop-only">{{ isPreviewMode ? 'Edit' : 'Preview' }}</span>
+            <span class="desktop-only">{{ isPreviewMode ? t('editor.editMode') : t('editor.previewMode') }}</span>
           </button>
-          <button @click="exportHtml" class="icon-btn" title="Export to HTML">
+          <button @click="exportHtml" class="icon-btn" :title="t('editor.exportToHtml')">
             <Download :size="20" />
           </button>
           <!-- Save Draft button - always available -->
@@ -390,33 +581,33 @@ const exportHtml = () => {
             class="secondary-btn" 
             @click="saveDraft" 
             :disabled="isSaving || isPublishing"
-            title="Save as draft (not published)"
+            :title="t('editor.saveDraft')"
           >
             <Save :size="18" />
-            <span class="desktop-only">{{ isSaving ? 'Saving…' : 'Save Draft' }}</span>
+            <span class="desktop-only">{{ isSaving ? t('editor.savingDraft') : t('editor.saveDraft') }}</span>
           </button>
           <!-- Publish button -->
           <button 
             class="primary" 
             @click="publish" 
             :disabled="isSaving || isPublishing"
-            title="Save and publish article"
+            :title="t('editor.savePublish')"
           >
-            <span v-if="!isPublishing">Publish</span>
-            <span v-else>Publishing…</span>
+            <span v-if="!isPublishing">{{ t('editor.publish') }}</span>
+            <span v-else>{{ t('editor.publishing') }}</span>
           </button>
         </div>
       </div>
 
       <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
       <p v-if="isDraft" class="draft-notice">
-        💾 This is a draft. Your changes are saved but not yet published.
+        {{ t('editor.draftNotice') }}
       </p>
       
       <RichEditor ref="editorRef" v-model="content" :editable="!isPreviewMode" />
       
       <!-- Table of Contents Sidebar -->
-      <TocSidebar :editor="editorRef?.editor" />
+      <TocSidebar :editor="editorRef?.editor" :is-open="showMobileToc" @close="showMobileToc = false" />
     </div>
   </div>
 
@@ -426,7 +617,8 @@ const exportHtml = () => {
     :title="dialogTitle"
     :message="dialogMessage"
     :type="dialogType"
-    @close="dialogOpen = false"
+    @close="handleDialogClose"
+    @confirm="handleDialogConfirm"
   />
 </template>
 
@@ -437,12 +629,22 @@ const exportHtml = () => {
   width: 100%;
 }
 
+.editor-header {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
 .editor-header-inputs {
   display: flex;
   flex-direction: column;
-  flex: 1;
+  flex: 1 1 auto;
   gap: 0.75rem;
-  margin-right: 1rem;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .author-input-container {
@@ -462,6 +664,8 @@ const exportHtml = () => {
   padding: 0; 
   min-width: 0;
   color: var(--text-color);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .author-input {
@@ -470,7 +674,7 @@ const exportHtml = () => {
   border: none;
   border-bottom: 1px dashed transparent;
   background: transparent;
-  flex: 1e;
+  flex: 1;
   border-bottom: 1px dashed transparent;
   background: transparent;
   width: 100%;
@@ -497,10 +701,49 @@ const exportHtml = () => {
   opacity: 1;
 }
 
+.topic-selector-container {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+.topic-select {
+  font-size: 0.95rem;
+  border: 1px solid var(--border-color);
+  background: var(--surface-color);
+  color: var(--text-color);
+  padding: 0.4rem 0.6rem;
+  border-radius: 4px;
+  outline: none;
+  transition: border-color 0.2s;
+  flex: 1;
+}
+
+.topic-select:hover {
+  border-color: var(--accent-color);
+}
+
+.topic-select:focus {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.topic-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .mb-4 { margin-bottom: 1rem; }
 
 .actions {
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  white-space: nowrap;
+  flex-wrap: wrap;
 }
 
 .icon-btn {
@@ -586,16 +829,187 @@ const exportHtml = () => {
   opacity: 0.7;
 }
 
-@media (max-width: 1250px) {
+.floating-scroll-top,
+.floating-scroll-bottom {
+  position: fixed;
+  right: max(2rem, calc(50% - 680px));
+  z-index: 95;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.08);
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  backdrop-filter: blur(6px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: var(--text-color);
+}
+
+.floating-scroll-top {
+  top: 310px;
+}
+
+.floating-scroll-bottom {
+  top: 356px;
+}
+
+.floating-scroll-top:hover,
+.floating-scroll-bottom:hover {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+}
+
+@media (max-width: 1350px) {
   .floating-toggle,
-  .floating-save {
+  .floating-save,
+  .floating-scroll-top,
+  .floating-scroll-bottom {
     display: none;
+  }
+}
+
+.mobile-toc-toggle,
+.mobile-actions-toggle {
+  display: none;
+  position: fixed;
+  z-index: 998;
+  width: 48px;
+  height: 48px;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-color);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transition: all 0.2s ease;
+}
+
+.mobile-only {
+  display: none;
+}
+
+@media (max-width: 1350px) {
+  .mobile-only {
+    display: flex;
+  }
+
+  .mobile-actions-panel.mobile-only {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .toc-backdrop.mobile-only {
+    display: block;
+  }
+}
+
+.mobile-toc-toggle:hover,
+.mobile-actions-toggle:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+.mobile-toc-toggle {
+  top: 120px;
+  right: 1rem;
+}
+
+.mobile-actions-toggle {
+  bottom: 1rem;
+  right: 1rem;
+}
+
+.mobile-actions-panel {
+  position: fixed;
+  bottom: 80px;
+  right: 1rem;
+  z-index: 997;
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0.5rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 200px;
+}
+
+.mobile-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-color);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.mobile-action-btn:hover:not(:disabled) {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+}
+
+.mobile-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.toc-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 998;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (max-width: 768px) {
+  .editor-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .editor-header-inputs {
+    margin-right: 0;
+  }
+  
+  .actions {
+    justify-content: flex-start;
+    width: 100%;
+  }
+  
+  .title-input {
+    font-size: 1.75rem;
   }
 }
 
 @media (max-width: 600px) {
   .desktop-only {
     display: none;
+  }
+  
+  .title-input {
+    font-size: 1.5rem;
   }
 }
 </style>

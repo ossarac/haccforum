@@ -295,6 +295,17 @@ a { color: var(--accent); }
 .tooltip-layer.active { display: flex; }
 .tooltip-box { position: relative; margin-top: 18vh; max-width: 460px; width: calc(100% - 32px); background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 12px; padding: 18px 18px 14px; box-shadow: 0 16px 40px rgba(0,0,0,0.18); }
 .tooltip-close { position: absolute; top: 8px; right: 8px; background: transparent; border: none; cursor: pointer; font-size: 16px; color: var(--text); }
+/* Footnotes */
+.footnote-ref { color: var(--accent); font-weight: 600; cursor: pointer; text-decoration: none; transition: all 0.2s ease; }
+.footnote-ref:hover { text-decoration: underline; }
+.footnotes-section { margin-top: 3rem; padding-top: 2rem; border-top: 2px solid var(--border); }
+.footnotes-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 1rem; color: var(--text); }
+.footnotes-list { list-style: none; padding: 0; margin: 0; }
+.footnote-item { display: flex; gap: 0.75rem; margin-bottom: 0.75rem; font-size: 0.9rem; line-height: 1.6; scroll-margin-top: 100px; }
+.footnote-number { color: var(--accent); font-weight: 600; flex-shrink: 0; min-width: 2rem; }
+.footnote-content { flex: 1; color: rgba(0,0,0,0.7); }
+.footnote-backlink { margin-left: 0.5rem; color: var(--accent); text-decoration: none; }
+.footnote-backlink:hover { text-decoration: underline; }
 /* TOC */
 .toc-sidebar { position: sticky; top: 32px; align-self: flex-start; width: 100%; max-height: calc(100vh - 64px); overflow: auto; padding: 1.2rem; background: var(--frame-surface); border: 1px solid var(--frame-border); border-radius: 14px; box-shadow: 0 8px 24px rgba(0,0,0,0.08); margin-right: 8px; }
 .toc-title { font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(0,0,0,0.55); font-weight: 700; margin-bottom: 0.75rem; }
@@ -328,6 +339,70 @@ a { color: var(--accent); }
         tooltipLayer.classList.add('active');
       });
     });
+    // Process footnotes
+    const footnotes = [];
+    const footnoteMap = new Map();
+    document.querySelectorAll('sup[data-footnote-content]').forEach((el, index) => {
+      const id = el.getAttribute('data-footnote-id');
+      const content = el.getAttribute('data-footnote-content');
+      if (id && content && !footnoteMap.has(id)) {
+        const number = footnotes.length + 1;
+        footnotes.push({ id, content, number });
+        footnoteMap.set(id, number);
+      }
+      const number = footnoteMap.get(id);
+      el.classList.add('footnote-ref');
+      el.setAttribute('data-footnote-number', number);
+      el.innerHTML = '[' + number + ']';
+      el.addEventListener('click', (e) => {
+        e.preventDefault();
+        const footnoteEl = document.getElementById('footnote-' + id);
+        if (footnoteEl) {
+          footnoteEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          footnoteEl.style.backgroundColor = 'color-mix(in srgb, var(--accent) 10%, transparent)';
+          setTimeout(() => { footnoteEl.style.backgroundColor = ''; }, 2000);
+        }
+      });
+    });
+    if (footnotes.length > 0) {
+      const readerSurface = document.querySelector('.reader-surface');
+      const footnotesSection = document.createElement('div');
+      footnotesSection.className = 'footnotes-section';
+      const title = document.createElement('div');
+      title.className = 'footnotes-title';
+      title.textContent = 'Footnotes';
+      footnotesSection.appendChild(title);
+      const list = document.createElement('ol');
+      list.className = 'footnotes-list';
+      footnotes.forEach(fn => {
+        const li = document.createElement('li');
+        li.className = 'footnote-item';
+        li.id = 'footnote-' + fn.id;
+        const number = document.createElement('span');
+        number.className = 'footnote-number';
+        number.textContent = fn.number + '.';
+        const content = document.createElement('span');
+        content.className = 'footnote-content';
+        content.innerHTML = fn.content;
+        const backlink = document.createElement('a');
+        backlink.href = '#';
+        backlink.className = 'footnote-backlink';
+        backlink.innerHTML = '↩';
+        backlink.addEventListener('click', (e) => {
+          e.preventDefault();
+          const ref = document.querySelector('sup[data-footnote-id="' + fn.id + '"]');
+          if (ref) {
+            ref.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        });
+        li.appendChild(number);
+        li.appendChild(content);
+        content.appendChild(backlink);
+        list.appendChild(li);
+      });
+      footnotesSection.appendChild(list);
+      readerSurface.appendChild(footnotesSection);
+    }
     document.querySelectorAll('context-component').forEach((node)=>{
       const wrapper = document.createElement('div');
       wrapper.className = 'context-card';

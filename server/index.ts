@@ -8,6 +8,7 @@ import env from './config/env.js'
 import { connectDatabase } from './database/connection.js'
 import authRoutes from './routes/auth.js'
 import articleRoutes from './routes/articles.js'
+import topicRoutes from './routes/topics.js'
 import uploadRoutes from './routes/uploads.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -31,6 +32,7 @@ app.get('/health', (_req, res) => {
 })
 
 app.use('/api/auth', authRoutes)
+app.use('/api/topics', topicRoutes)
 app.use('/api/articles', articleRoutes)
 app.use('/api/upload', uploadRoutes)
 

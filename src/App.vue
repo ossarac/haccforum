@@ -2,9 +2,12 @@
 import { RouterView, useRouter } from 'vue-router'
 import { ref, onMounted, computed } from 'vue'
 import { storeToRefs } from 'pinia'
-import { Moon, Sun, PenTool, LogOut, FileText, Settings } from 'lucide-vue-next'
+import { Moon, Sun, PenTool, LogOut, FileText, Settings, Languages } from 'lucide-vue-next'
 import { useAuthStore } from './stores/authStore'
+import { useI18n } from 'vue-i18n'
+import { setLanguage, getLanguage } from './i18n'
 
+const { t, locale } = useI18n()
 const isDark = ref(false)
 const THEME_KEY = 'haccedit_theme'
 const router = useRouter()
@@ -22,6 +25,20 @@ const toggleTheme = () => {
     document.documentElement.classList.remove('dark')
   }
   localStorage.setItem(THEME_KEY, isDark.value ? 'dark' : 'light')
+}
+
+const toggleLanguage = async () => {
+  const newLang = locale.value === 'tr' ? 'en' : 'tr'
+  setLanguage(newLang)
+  
+  // If user is authenticated, save preference to profile
+  if (isAuthenticated.value) {
+    try {
+      await auth.updateLanguagePreference(newLang)
+    } catch (error) {
+      console.error('Failed to save language preference:', error)
+    }
+  }
 }
 
 onMounted(() => {
@@ -55,31 +72,39 @@ const signOut = () => {
         </div>
         
         <nav class="flex-row gap-4">
-          <button @click="router.push('/')" class="icon-btn" title="Home">
-            <span class="desktop-only">Home</span>
+          <button @click="router.push('/')" class="icon-btn" :title="t('nav.home')">
+            <span class="desktop-only">{{ t('nav.home') }}</span>
           </button>
-          <button @click="router.push('/editor')" class="icon-btn" title="Write">
+          <button @click="router.push('/editor')" class="icon-btn" :title="t('nav.write')">
             <PenTool :size="20" />
-            <span class="desktop-only">Write</span>
+            <span class="desktop-only">{{ t('nav.write') }}</span>
           </button>
-          <button v-if="isAuthenticated" @click="router.push('/drafts')" class="icon-btn" title="Drafts">
+          <button v-if="isAuthenticated" @click="router.push('/drafts')" class="icon-btn" :title="t('nav.drafts')">
             <FileText :size="20" />
-            <span class="desktop-only">Drafts</span>
+            <span class="desktop-only">{{ t('nav.drafts') }}</span>
           </button>
-          <button v-if="isAuthenticated && isAdmin" @click="router.push('/admin/articles')" class="icon-btn admin-btn" title="Admin">
+          <button v-if="isAuthenticated && isAdmin" @click="router.push('/admin/articles')" class="icon-btn admin-btn" :title="t('nav.admin') + ' - ' + t('nav.articles')">
             <Settings :size="20" />
-            <span class="desktop-only">Admin</span>
+            <span class="desktop-only">{{ t('nav.articles') }}</span>
           </button>
-           <button @click="toggleTheme" class="icon-btn" title="Toggle Theme">
+          <button v-if="isAuthenticated && (isAdmin || auth.hasRole('editor'))" @click="router.push('/admin/topics')" class="icon-btn admin-btn" :title="t('nav.manageTopics')">
+            <Settings :size="20" />
+            <span class="desktop-only">{{ t('nav.topics') }}</span>
+          </button>
+          <button @click="toggleLanguage" class="icon-btn language-btn" :title="t('language.select')">
+            <Languages :size="20" />
+            <span class="desktop-only">{{ locale === 'tr' ? 'TR' : 'EN' }}</span>
+          </button>
+          <button @click="toggleTheme" class="icon-btn" :title="t('nav.toggleTheme')">
             <Sun v-if="!isDark" :size="20" />
             <Moon v-else :size="20" />
           </button>
-          <button v-if="!isAuthenticated" @click="goToLogin" class="icon-btn" title="Sign In">
-            <span class="desktop-only">Login</span>
+          <button v-if="!isAuthenticated" @click="goToLogin" class="icon-btn" :title="t('nav.login')">
+            <span class="desktop-only">{{ t('nav.login') }}</span>
           </button>
           <div v-else class="user-chip">
             <span class="name">{{ userName }}</span>
-            <button class="icon-btn logout" @click="signOut" title="Sign Out">
+            <button class="icon-btn logout" @click="signOut" :title="t('nav.signOut')">
               <LogOut :size="18" />
             </button>
           </div>
@@ -175,6 +200,10 @@ const signOut = () => {
 
 .admin-btn:hover {
   background: rgba(125, 125, 125, 0.12);
+}
+
+.language-btn {
+  font-weight: 600;
 }
 
 @media (max-width: 600px) {

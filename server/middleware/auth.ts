@@ -8,6 +8,9 @@ interface TokenPayload {
   email: string
   name: string
   roles: string[]
+  language?: string
+  emailVerified?: boolean
+  readingPreferences?: any
   iat: number
   exp: number
 }
@@ -31,7 +34,10 @@ export function authenticate(req: Request, res: Response, next: NextFunction): v
       id: decoded.id,
       email: decoded.email,
       name: decoded.name,
-      roles: decoded.roles
+      roles: decoded.roles,
+      language: decoded.language,
+      emailVerified: decoded.emailVerified,
+      readingPreferences: decoded.readingPreferences
     }
     next()
   } catch (error) {
@@ -61,7 +67,10 @@ export function optionalAuthenticate(req: Request, res: Response, next: NextFunc
       id: decoded.id,
       email: decoded.email,
       name: decoded.name,
-      roles: decoded.roles
+      roles: decoded.roles,
+      language: decoded.language,
+      emailVerified: decoded.emailVerified,
+      readingPreferences: decoded.readingPreferences
     }
     next()
   } catch (error) {

@@ -7,11 +7,13 @@ const props = defineProps<{
   isOpen: boolean
   title: string
   initialContent?: string
+  showDelete?: boolean
 }>()
 
 const emit = defineEmits<{
   close: []
   save: [content: string]
+  delete: []
 }>()
 
 const content = ref(props.initialContent || '')
@@ -40,6 +42,11 @@ const handleSave = () => {
 const handleCancel = () => {
   emit('close')
 }
+
+const handleDelete = () => {
+  emit('delete')
+  emit('close')
+}
 </script>
 
 <template>
@@ -60,6 +67,8 @@ const handleCancel = () => {
         </div>
         
         <div class="modal-footer">
+          <button v-if="showDelete" @click="handleDelete" class="danger">Delete</button>
+          <div class="spacer"></div>
           <button @click="handleCancel" class="secondary">Cancel</button>
           <button @click="handleSave" class="primary">Save</button>
         </div>
@@ -177,6 +186,10 @@ const handleCancel = () => {
   flex-shrink: 0;
 }
 
+.spacer {
+  flex: 1;
+}
+
 button.secondary {
   background: var(--surface-color);
   border: 1px solid var(--border-color);
@@ -201,6 +214,20 @@ button.primary {
 }
 
 button.primary:hover {
+  opacity: 0.9;
+}
+
+button.danger {
+  background: var(--danger-color, #ef4444);
+  border: none;
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-weight: 500;
+}
+
+button.danger:hover {
   opacity: 0.9;
 }
 </style>

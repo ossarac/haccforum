@@ -1,10 +1,19 @@
 <script setup lang="ts">
 import { ref, watch, onUnmounted } from 'vue'
 import { Editor } from '@tiptap/vue-3'
+import { useI18n } from 'vue-i18n'
+import { X } from 'lucide-vue-next'
 
 const props = defineProps<{
   editor: Editor | undefined
+  isOpen?: boolean
 }>()
+
+const emit = defineEmits<{
+  close: []
+}>()
+
+const { t } = useI18n()
 
 const headings = ref<{ id: string; text: string; level: number; pos: number }[]>([])
 
@@ -70,8 +79,11 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <aside v-if="headings.length > 0" class="toc-sidebar">
-    <div class="toc-title">Table of Contents</div>
+  <aside v-if="headings.length > 0" class="toc-sidebar" :class="{ 'mobile-open': props.isOpen }">
+    <button class="toc-close-btn" @click="emit('close')" :title="t('toc.close')">
+      <X :size="20" />
+    </button>
+    <div class="toc-title">{{ t('toc.title') }}</div>
     <nav>
       <ul>
         <li 
@@ -106,6 +118,10 @@ onUnmounted(() => {
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-sm);
   z-index: 90;
+}
+
+.toc-close-btn {
+  display: none;
 }
 
 .toc-title {
@@ -166,9 +182,51 @@ li:hover {
   background: var(--text-secondary);
 }
 
-@media (max-width: 1250px) {
+@media (max-width: 1350px) {
   .toc-sidebar {
-    display: none; /* Hide on smaller screens */
+    display: none; /* Hide by default on smaller screens */
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: auto;
+    width: 280px;
+    max-height: 100vh;
+    padding-top: 3rem;
+    z-index: 999;
+    background: var(--surface-color);
+    box-shadow: -4px 0 12px rgba(0, 0, 0, 0.15);
+    transform: translateX(100%);
+    transition: transform 0.3s ease;
+  }
+
+  .toc-sidebar.mobile-open {
+    display: block;
+    transform: translateX(0);
+  }
+
+  .toc-close-btn {
+    display: flex;
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-color);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    z-index: 10;
+  }
+
+  .toc-close-btn:hover {
+    border-color: var(--accent-color);
+    color: var(--accent-color);
   }
 }
 </style>

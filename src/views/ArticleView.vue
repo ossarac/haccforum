@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import type { CSSProperties } from 'vue'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Calendar, User, MessageSquare, ArrowLeft, Palette, Copy, Download, Undo, Trash2 } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
+import { Calendar, User, MessageSquare, ArrowLeft, Palette, Copy, Download, Undo, Trash2, ChevronUp, ChevronDown, List, X } from 'lucide-vue-next'
 import { ApiError } from '../api/client'
 import RichEditor from '../components/Editor/RichEditor.vue'
 import TocSidebar from '../components/Editor/TocSidebar.vue'
@@ -11,6 +12,7 @@ import { useArticleStore } from '../stores/articleStore'
 import { useAuthStore } from '../stores/authStore'
 import { API_BASE_URL } from '../api/client'
 
+const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const store = useArticleStore()
@@ -28,6 +30,11 @@ const isDuplicating = ref(false)
 const isExporting = ref(false)
 const isUnpublishing = ref(false)
 const isDeleting = ref(false)
+const showFloatingButtons = ref(false)
+const showMobileToc = ref(false)
+const showMobileScrollButtons = ref(false)
+const articleHeaderRef = ref<HTMLElement | null>(null)
+let scrollObserver: IntersectionObserver | null = null
 
 // Dialog state
 const dialogOpen = ref(false)
@@ -500,8 +507,48 @@ const loadArticle = async (id: string) => {
   }
 }
 
+const scrollToTop = () => {
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+const scrollToBottom = () => {
+  window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })
+}
+
 onMounted(() => {
   loadArticle(articleId.value)
+  
+  // Setup observer to show floating buttons when article header is not visible
+  scrollObserver = new IntersectionObserver(
+    (entries) => {
+      const entry = entries[0]
+      if (!entry) return
+      showFloatingButtons.value = !entry.isIntersecting
+    },
+    {
+      root: null,
+      threshold: 0.1,
+      rootMargin: '0px'
+    }
+  )
+  
+  // We'll observe the article header once it's rendered
+  setTimeout(() => {
+    if (articleHeaderRef.value) {
+      scrollObserver?.observe(articleHeaderRef.value)
+    }
+  }, 100)
+})
+
+watch(() => articleHeaderRef.value, (newRef) => {
+  if (newRef && scrollObserver) {
+    scrollObserver.observe(newRef)
+  }
+})
+
+onUnmounted(() => {
+  scrollObserver?.disconnect()
+  scrollObserver = null
 })
 
 watch(
@@ -514,13 +561,82 @@ watch(
 </script>
 
 <template>
+  <!-- Backdrop for mobile TOC -->
+  <div
+    v-if="showMobileToc"
+    class="toc-backdrop mobile-only"
+    @click="showMobileToc = false"
+  ></div>
+
+  <!-- Mobile TOC Toggle Button (appears on narrow screens) -->
+  <button
+    class="mobile-toc-toggle mobile-only"
+    @click="showMobileToc = !showMobileToc"
+    :title="showMobileToc ? t('toc.close') : t('toc.open')"
+    :aria-label="showMobileToc ? t('toc.close') : t('toc.open')"
+  >
+    <X v-if="showMobileToc" :size="20" />
+    <List v-else :size="20" />
+  </button>
+
+  <!-- Mobile Scroll Buttons Toggle (appears on narrow screens) -->
+  <button
+    class="mobile-scroll-toggle mobile-only"
+    @click="showMobileScrollButtons = !showMobileScrollButtons"
+    :title="showMobileScrollButtons ? t('common.close') : t('common.scrollButtons')"
+    :aria-label="showMobileScrollButtons ? t('common.close') : t('common.scrollButtons')"
+  >
+    <X v-if="showMobileScrollButtons" :size="20" />
+    <ChevronUp v-else :size="20" />
+  </button>
+
+  <!-- Mobile Scroll Buttons Panel -->
+  <div v-if="showMobileScrollButtons" class="mobile-scroll-panel mobile-only">
+    <button
+      class="mobile-scroll-btn"
+      @click="scrollToTop"
+      :title="t('common.goToTop')"
+    >
+      <ChevronUp :size="18" />
+      <span>{{ t('common.goToTop') }}</span>
+    </button>
+    <button
+      class="mobile-scroll-btn"
+      @click="scrollToBottom"
+      :title="t('common.goToBottom')"
+    >
+      <ChevronDown :size="18" />
+      <span>{{ t('common.goToBottom') }}</span>
+    </button>
+  </div>
+
+  <button
+    v-if="showFloatingButtons"
+    class="floating-scroll-top"
+    @click="scrollToTop"
+    title="Go to top"
+    aria-label="Go to top"
+  >
+    <ChevronUp :size="18" />
+  </button>
+
+  <button
+    v-if="showFloatingButtons"
+    class="floating-scroll-bottom"
+    @click="scrollToBottom"
+    title="Go to bottom"
+    aria-label="Go to bottom"
+  >
+    <ChevronDown :size="18" />
+  </button>
+
   <div v-if="article && !articleLoading" class="container article-view">
     <button v-if="article.parentId" @click="goToParent" class="back-btn mb-4">
       <ArrowLeft :size="16" /> Back to Parent
     </button>
 
     <article class="main-article">
-      <h1 class="article-title">{{ article.title }}</h1>
+      <h1 class="article-title" ref="articleHeaderRef">{{ article.title }}</h1>
       <div class="article-meta flex-row gap-4">
         <span class="flex-row gap-2" :class="{ 'custom-author': article.authorName }">
           <User :size="14" /> 
@@ -538,7 +654,7 @@ watch(
             @click="exportArticle"
           >
             <Download :size="16" />
-            <span>{{ isExporting ? 'Preparing…' : 'Export HTML' }}</span>
+            <span>{{ isExporting ? 'Preparing…' : t('article.export') }}</span>
           </button>
           <button
             v-if="canDuplicate"
@@ -547,7 +663,7 @@ watch(
             @click="duplicateToDraft"
           >
             <Copy :size="16" />
-            <span>{{ isDuplicating ? 'Creating copy…' : 'Copy to drafts' }}</span>
+            <span>{{ isDuplicating ? 'Creating copy…' : t('article.duplicate') }}</span>
           </button>
           <button
             v-if="canUnpublish"
@@ -556,7 +672,7 @@ watch(
             @click="unpublishArticle"
           >
             <Undo :size="16" />
-            <span>{{ isUnpublishing ? 'Unpublishing…' : 'Unpublish to drafts' }}</span>
+            <span>{{ isUnpublishing ? 'Unpublishing…' : t('article.unpublish') }}</span>
           </button>
         </template>
 
@@ -567,21 +683,21 @@ watch(
           @click="deleteArticle"
         >
           <Trash2 :size="16" />
-          <span>{{ isDeleting ? 'Deleting…' : 'Delete article' }}</span>
+          <span>{{ isDeleting ? 'Deleting…' : t('article.adminDelete') }}</span>
         </button>
       </div>
 
       <div class="reader-toolbar-toggle">
         <button class="flex-row gap-2" type="button" @click="showReaderToolbar = !showReaderToolbar">
           <Palette :size="16" />
-          <span>{{ showReaderToolbar ? 'Hide reading tools' : 'Reading tools' }}</span>
+          <span>{{ showReaderToolbar ? t('common.close') : t('article.readingPreferences') }}</span>
         </button>
       </div>
 
       <transition name="fade">
         <div v-if="showReaderToolbar" class="reader-toolbar">
           <div class="toolbar-section">
-            <div class="toolbar-label">Background</div>
+            <div class="toolbar-label">{{ t('article.background') }}</div>
             <div class="preset-grid">
               <button
                 v-for="preset in backgroundPresets"
@@ -602,7 +718,7 @@ watch(
           </div>
 
           <div class="toolbar-section">
-            <div class="toolbar-label">Font</div>
+            <div class="toolbar-label">{{ t('article.font') }}</div>
             <div class="pill-group">
               <button
                 v-for="font in fontPresets"
@@ -620,7 +736,7 @@ watch(
 
           <div class="toolbar-section options-grid">
             <div>
-              <div class="toolbar-label">Font Size</div>
+              <div class="toolbar-label">{{ t('article.fontSize') }}</div>
               <div class="pill-group">
                 <button
                   v-for="size in fontSizes"
@@ -636,7 +752,7 @@ watch(
             </div>
 
             <div>
-              <div class="toolbar-label">Line Spacing</div>
+              <div class="toolbar-label">{{ t('article.lineHeight') }}</div>
               <div class="pill-group">
                 <button
                   v-for="lh in lineHeights"
@@ -652,7 +768,7 @@ watch(
             </div>
 
             <div>
-              <div class="toolbar-label">Document Width</div>
+              <div class="toolbar-label">{{ t('article.width') }}</div>
               <div class="pill-group">
                 <button
                   v-for="doc in docWidthPresets"
@@ -673,7 +789,7 @@ watch(
       <div class="article-content-wrapper reader-surface" :style="readerSurfaceStyle">
         <!-- Re-using RichEditor in read-only mode for perfect rendering of custom nodes -->
         <RichEditor ref="editorRef" :model-value="article.content" :editable="false" />
-        <TocSidebar :editor="editorRef?.editor" />
+        <TocSidebar :editor="editorRef?.editor" :is-open="showMobileToc" @close="showMobileToc = false" />
       </div>
     </article>
 
@@ -969,6 +1085,154 @@ watch(
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+.floating-scroll-top,
+.floating-scroll-bottom {
+  position: fixed;
+  right: 2rem;
+  z-index: 95;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.08);
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  backdrop-filter: blur(6px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: var(--text-color);
+}
+
+.floating-scroll-top {
+  bottom: 120px;
+}
+
+.floating-scroll-bottom {
+  bottom: 60px;
+}
+
+.floating-scroll-top:hover,
+.floating-scroll-bottom:hover {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+  transform: scale(1.05);
+}
+
+@media (max-width: 768px) {
+  .floating-scroll-top,
+  .floating-scroll-bottom {
+    display: none;
+  }
+}
+
+.mobile-toc-toggle,
+.mobile-scroll-toggle {
+  display: none;
+  position: fixed;
+  z-index: 998;
+  width: 48px;
+  height: 48px;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-color);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transition: all 0.2s ease;
+}
+
+.mobile-only {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .mobile-only {
+    display: flex;
+  }
+
+  .mobile-scroll-panel.mobile-only {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .toc-backdrop.mobile-only {
+    display: block;
+  }
+}
+
+.mobile-toc-toggle:hover,
+.mobile-scroll-toggle:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+.mobile-toc-toggle {
+  top: 120px;
+  right: 1rem;
+}
+
+.mobile-scroll-toggle {
+  bottom: 1rem;
+  right: 1rem;
+}
+
+.mobile-scroll-panel {
+  position: fixed;
+  bottom: 80px;
+  right: 1rem;
+  z-index: 997;
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0.5rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 200px;
+}
+
+.mobile-scroll-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-color);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.mobile-scroll-btn:hover {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+}
+
+.toc-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 998;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @media (max-width: 640px) {

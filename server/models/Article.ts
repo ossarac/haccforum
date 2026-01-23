@@ -14,6 +14,7 @@ export interface ArticleDocument extends Document {
   authorName?: string
   parentId: Types.ObjectId | null
   ancestors: Types.ObjectId[]
+  topicId: Types.ObjectId | null
   author: Types.ObjectId
   version: number
   revisions: ArticleRevision[]
@@ -44,6 +45,7 @@ const articleSchema = new Schema<ArticleDocument>(
     authorName: { type: String, trim: true },
     parentId: { type: Schema.Types.ObjectId, ref: 'Article', default: null },
     ancestors: { type: [Schema.Types.ObjectId], default: [] },
+    topicId: { type: Schema.Types.ObjectId, ref: 'Topic', default: null },
     author: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     version: { type: Number, default: 1 },
     revisions: { type: [revisionSchema], default: [] },
@@ -65,6 +67,9 @@ articleSchema.index({ author: 1, published: 1 })
 articleSchema.index({ published: 1, parentId: 1 })
 articleSchema.index({ ancestors: 1 })
 articleSchema.index({ deleted: 1, parentId: 1 })
+// Index for topic-based queries
+articleSchema.index({ topicId: 1, deleted: 1 })
+articleSchema.index({ topicId: 1, published: 1 })
 
 articleSchema.set('toJSON', {
   virtuals: true,

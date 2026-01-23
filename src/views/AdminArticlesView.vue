@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/authStore'
 import { apiRequest } from '../api/client'
 import { AlertCircle } from 'lucide-vue-next'
@@ -27,6 +28,7 @@ interface ArticleNode extends Article {
   children: ArticleNode[]
 }
 
+const { t } = useI18n()
 const router = useRouter()
 const auth = useAuthStore()
 
@@ -109,8 +111,8 @@ onMounted(async () => {
       <!-- Header -->
       <div class="header">
         <div class="header-content">
-          <h1>Article Management</h1>
-          <p class="subtitle">Manage and restore deleted articles</p>
+          <h1>{{ t('admin.articleManagement') }}</h1>
+          <p class="subtitle">{{ t('admin.manageRestore') }}</p>
         </div>
       </div>
 
@@ -122,14 +124,14 @@ onMounted(async () => {
 
       <!-- Loading State -->
       <div v-if="isLoading" class="loading">
-        <p>Loading deleted articles...</p>
+        <p>{{ t('admin.loadingArticles') }}</p>
       </div>
 
       <!-- Empty State -->
       <div v-else-if="deletedArticles.length === 0" class="empty-state">
         <div class="empty-icon">🗑️</div>
-        <h2>No deleted articles</h2>
-        <p>All articles are active</p>
+        <h2>{{ t('admin.noDeleted') }}</h2>
+        <p>{{ t('admin.allActive') }}</p>
       </div>
 
       <!-- Articles Tree -->
