@@ -163,7 +163,8 @@ export default {
     justNow: 'just now',
     minutesAgo: '{count}m ago',
     hoursAgo: '{count}h ago',
-    daysAgo: '{count}d ago'
+    daysAgo: '{count}d ago',
+    reply: 'Reply'
   },
   common: {
     loading: 'Loading...',
@@ -205,7 +206,8 @@ export default {
     browseBySubject: 'Browse by subject areas',
     noTopicsYet: 'No topics with articles yet. Be the first to contribute!',
     recent: 'Recent:',
-    viewAllArticles: 'View all articles'
+    viewAllArticles: 'View all articles',
+    reply: 'Reply'
   },
   login: {
     welcomeBack: 'Welcome Back',

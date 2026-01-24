@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { useArticleStore, type Article } from '../stores/articleStore'
 import { useTopicStore, type Topic } from '../stores/topicStore'
 import { useAuthStore } from '../stores/authStore'
-import { ChevronRight, FileText, Plus, FolderTree, Layers, Clock, User } from 'lucide-vue-next'
+import { ChevronRight, FileText, Plus, FolderTree, Layers, Clock, User, CornerDownRight } from 'lucide-vue-next'
 
 const router = useRouter()
 const route = useRoute()
@@ -267,10 +267,17 @@ const getTopicColor = (topicId: string) => {
             v-for="article in currentTopicArticles" 
             :key="article.id"
             class="article-card"
+            :class="{ 'is-reply': article.parentId }"
             @click="viewArticle(article.id)"
           >
             <div class="article-content">
-              <h3 class="article-title">{{ article.title }}</h3>
+              <div class="article-title-row">
+                <span v-if="article.parentId" class="reply-badge">
+                  <CornerDownRight :size="14" />
+                  <span>{{ t('topic.reply') }}</span>
+                </span>
+                <h3 class="article-title">{{ article.title }}</h3>
+              </div>
               <div class="article-meta">
                 <div class="meta-item">
                   <User :size="14" />
@@ -313,10 +320,17 @@ const getTopicColor = (topicId: string) => {
                   v-for="article in (groupedArticles.get(subtopic.id) || []).slice(0, 5)" 
                   :key="article.id"
                   class="article-card"
+                  :class="{ 'is-reply': article.parentId }"
                   @click="viewArticle(article.id)"
                 >
                   <div class="article-content">
-                    <h4 class="article-title">{{ article.title }}</h4>
+                    <div class="article-title-row">
+                      <span v-if="article.parentId" class="reply-badge">
+                        <CornerDownRight :size="12" />
+                        <span>{{ t('topic.reply') }}</span>
+                      </span>
+                      <h4 class="article-title">{{ article.title }}</h4>
+                    </div>
                     <div class="article-meta">
                       <div class="meta-item">
                         <User :size="14" />
@@ -608,6 +622,11 @@ const getTopicColor = (topicId: string) => {
   transition: all 0.2s;
 }
 
+.article-card.is-reply {
+  border-left: 3px solid var(--accent-color);
+  background: linear-gradient(to right, rgba(99, 102, 241, 0.03) 0%, var(--card-bg) 40px);
+}
+
 .article-card:hover {
   border-color: var(--text-secondary);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
@@ -619,10 +638,36 @@ const getTopicColor = (topicId: string) => {
   min-width: 0;
 }
 
+.article-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.reply-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  background: var(--accent-color);
+  color: white;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.articles-list.compact .reply-badge {
+  font-size: 0.7rem;
+  padding: 0.2rem 0.4rem;
+}
+
 .article-title {
   font-size: 1.125rem;
   font-weight: 600;
-  margin: 0 0 0.5rem 0;
+  margin: 0;
   color: var(--text-color);
   overflow: hidden;
   text-overflow: ellipsis;

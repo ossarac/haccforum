@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { useArticleStore, type Article } from '../stores/articleStore'
 import { useTopicStore } from '../stores/topicStore'
 import { useAuthStore } from '../stores/authStore'
-import { Plus, ChevronRight, Clock, MessageSquare, TrendingUp } from 'lucide-vue-next'
+import { Plus, ChevronRight, Clock, MessageSquare, TrendingUp, CornerDownRight } from 'lucide-vue-next'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -151,14 +151,21 @@ const getTopicColor = (topicId: string) => {
             v-for="article in recentArticles" 
             :key="article.id"
             class="recent-card"
+            :class="{ 'is-reply': article.parentId }"
             @click="viewArticle(article.id)"
           >
-            <div class="recent-card-topic" v-if="article.topicId">
-              <span 
-                class="topic-indicator"
-                :style="{ backgroundColor: getTopicColor(article.topicId) }"
-              ></span>
-              <span class="topic-name">{{ getTopicById(article.topicId)?.name }}</span>
+            <div class="recent-card-header">
+              <div class="recent-card-topic" v-if="article.topicId">
+                <span 
+                  class="topic-indicator"
+                  :style="{ backgroundColor: getTopicColor(article.topicId) }"
+                ></span>
+                <span class="topic-name">{{ getTopicById(article.topicId)?.name }}</span>
+              </div>
+              <span v-if="article.parentId" class="reply-badge">
+                <CornerDownRight :size="12" />
+                <span>{{ t('home.reply') }}</span>
+              </span>
             </div>
             <h3 class="recent-card-title">{{ article.title }}</h3>
             <div class="recent-card-meta">
@@ -220,9 +227,11 @@ const getTopicColor = (topicId: string) => {
                 v-for="article in stats.latestArticles.slice(0, 3)" 
                 :key="article.id"
                 class="topic-article-item"
+                :class="{ 'is-reply': article.parentId }"
                 @click.stop="viewArticle(article.id)"
               >
-                <span class="article-bullet">→</span>
+                <span class="article-bullet" v-if="!article.parentId">→</span>
+                <CornerDownRight v-else :size="14" class="reply-icon" />
                 <span class="article-item-title">{{ article.title }}</span>
                 <span class="article-item-time">{{ formatTimeAgo(article.publishedAt || article.createdAt) }}</span>
               </div>
@@ -396,6 +405,11 @@ const getTopicColor = (topicId: string) => {
   overflow: hidden;
 }
 
+.recent-card.is-reply {
+  border-left: 3px solid var(--accent-color);
+  background: linear-gradient(to right, rgba(99, 102, 241, 0.03) 0%, var(--surface-color) 40px);
+}
+
 .recent-card::before {
   content: '';
   position: absolute;
@@ -420,12 +434,33 @@ const getTopicColor = (topicId: string) => {
   transform: translateY(-3px);
 }
 
+.recent-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
 .recent-card-topic {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   font-size: 0.8rem;
   color: var(--text-secondary);
+}
+
+.reply-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  background: var(--accent-color);
+  color: white;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .topic-indicator {
@@ -618,6 +653,12 @@ const getTopicColor = (topicId: string) => {
   font-size: 0.9rem;
 }
 
+.topic-article-item.is-reply {
+  border-left: 2px solid var(--accent-color);
+  padding-left: 0.5rem;
+  background: linear-gradient(to right, rgba(99, 102, 241, 0.03) 0%, transparent 30px);
+}
+
 .topic-article-item:hover {
   background: var(--surface-color);
   padding-left: 0.5rem;
@@ -627,6 +668,11 @@ const getTopicColor = (topicId: string) => {
   color: var(--text-secondary);
   font-weight: 600;
   font-size: 0.85em;
+  flex-shrink: 0;
+}
+
+.reply-icon {
+  color: var(--accent-color);
   flex-shrink: 0;
 }
 

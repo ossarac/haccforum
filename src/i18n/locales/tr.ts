@@ -163,7 +163,8 @@ export default {
     justNow: 'şimdi',
     minutesAgo: '{count} dk önce',
     hoursAgo: '{count} sa önce',
-    daysAgo: '{count} gün önce'
+    daysAgo: '{count} gün önce',
+    reply: 'Yanıt'
   },
   common: {
     loading: 'Yükleniyor...',
@@ -205,7 +206,8 @@ export default {
     browseBySubject: 'Konu alanlarına göre gözat',
     noTopicsYet: 'Henüz makalesi olan konu yok. İlk siz katkıda bulunun!',
     recent: 'Son:',
-    viewAllArticles: 'Tüm makaleleri görüntüle'
+    viewAllArticles: 'Tüm makaleleri görüntüle',
+    reply: 'Yanıt'
   },
   login: {
     welcomeBack: 'Tekrar Hoş Geldiniz',

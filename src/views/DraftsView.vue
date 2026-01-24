@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { useArticleStore } from '../stores/articleStore'
 import { useAuthStore } from '../stores/authStore'
 import Dialog from '../components/Dialog.vue'
-import { Plus, Trash2, Send } from 'lucide-vue-next'
+import { Plus, Trash2, Send, CornerDownRight } from 'lucide-vue-next'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -116,10 +116,16 @@ onMounted(async () => {
 
       <!-- Drafts List -->
       <div v-else class="drafts-grid">
-        <div v-for="draft in drafts" :key="draft.id" class="draft-card">
+        <div v-for="draft in drafts" :key="draft.id" class="draft-card" :class="{ 'is-reply': draft.parentId }">
           <div class="draft-header">
             <div class="draft-title-section">
-              <h3 class="draft-title">{{ draft.title || t('drafts.untitledDraft') }}</h3>
+              <div class="title-with-badge">
+                <span v-if="draft.parentId" class="reply-badge">
+                  <CornerDownRight :size="12" />
+                  <span>{{ t('topic.reply') }}</span>
+                </span>
+                <h3 class="draft-title">{{ draft.title || t('drafts.untitledDraft') }}</h3>
+              </div>
               <p class="draft-meta">
                 {{ t('drafts.lastUpdated') }} {{ formatDateTime(draft.updatedAt) }}
               </p>
@@ -250,6 +256,11 @@ onMounted(async () => {
   height: 100%;
 }
 
+.draft-card.is-reply {
+  border-left: 3px solid var(--accent-color);
+  background: linear-gradient(to right, rgba(99, 102, 241, 0.03) 0%, var(--surface-color) 40px);
+}
+
 .draft-card:hover {
   border-color: var(--accent-color);
   box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1);
@@ -266,6 +277,27 @@ onMounted(async () => {
 .draft-title-section {
   flex: 1;
   min-width: 0;
+}
+
+.title-with-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.reply-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  background: var(--accent-color);
+  color: white;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .draft-title {

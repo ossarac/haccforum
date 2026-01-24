@@ -126,24 +126,26 @@ export async function listArticles(req: Request, res: Response): Promise<void> {
   const isAdmin = isAdminUser(req)
   const includeDeleted = isAdmin && parseBooleanFlag(req.query.includeDeleted)
 
-  let parentFilter: Record<string, unknown>
-  if (!parentId || parentId === 'root') {
-    parentFilter = { parentId: null }
-  } else if (typeof parentId === 'string' && Types.ObjectId.isValid(parentId)) {
-    parentFilter = { parentId }
-  } else {
-    res.status(400).json({ message: t('invalidParentIdParameter', req) })
-    return
-  }
-
-  const filters: Record<string, unknown>[] = [parentFilter]
+  const filters: Record<string, unknown>[] = []
   
-  // Add topicId filter if provided
+  // If topicId is provided, fetch all articles in that topic (ignoring parentId)
   if (topicId && typeof topicId === 'string' && Types.ObjectId.isValid(topicId)) {
     filters.push({ topicId })
   } else if (topicId && typeof topicId === 'string') {
     res.status(400).json({ message: t('invalidTopicIdParameter', req) })
     return
+  } else {
+    // If no topicId, use parentId filter (for fetching children of a specific article)
+    let parentFilter: Record<string, unknown>
+    if (!parentId || parentId === 'root') {
+      parentFilter = { parentId: null }
+    } else if (typeof parentId === 'string' && Types.ObjectId.isValid(parentId)) {
+      parentFilter = { parentId }
+    } else {
+      res.status(400).json({ message: t('invalidParentIdParameter', req) })
+      return
+    }
+    filters.push(parentFilter)
   }
 
   // Filter out deleted articles unless admin explicitly requests them
@@ -159,9 +161,9 @@ export async function listArticles(req: Request, res: Response): Promise<void> {
     .sort({ createdAt: -1 })
     .populate('author', 'name email')
   
-  console.log(`[listArticles] Found ${articles.length} articles with parentFilter:`, JSON.stringify(parentFilter, null, 2))
+  console.log(`[listArticles] Found ${articles.length} articles`)
   articles.forEach(a => {
-    console.log(`  - ${a._id}: title="${a.title}" deleted=${a.deleted} published=${a.published}`)
+    console.log(`  - ${a._id}: title="${a.title}" deleted=${a.deleted} published=${a.published} parentId=${a.parentId}`)
   })
   
   res.status(200).json({ articles: articles.map(formatArticle) })
@@ -931,16 +933,11 @@ export async function permanentlyDeleteArticle(req: Request, res: Response): Pro
  */
 export async function getRecentArticles(req: Request, res: Response): Promise<void> {
   const limit = parseInt(req.query.limit as string) || 6
-  const isAdmin = isAdminUser(req)
 
   const filters: Record<string, unknown>[] = [
-    { parentId: null }, // Only root articles
-    { deleted: { $ne: true } }
+    { deleted: { $ne: true } },
+    { published: true }
   ]
-
-  if (!isAdmin) {
-    filters.push({ published: true })
-  }
 
   const articles = await ArticleModel.find({ $and: filters })
     .sort({ publishedAt: -1, createdAt: -1 })
@@ -955,15 +952,9 @@ export async function getRecentArticles(req: Request, res: Response): Promise<vo
  * Returns article counts and latest activity per topic
  */
 export async function getTopicStatistics(req: Request, res: Response): Promise<void> {
-  const isAdmin = isAdminUser(req)
-  
   const matchConditions: any = {
-    parentId: null, // Only count root articles
-    deleted: { $ne: true }
-  }
-
-  if (!isAdmin) {
-    matchConditions.published = true
+    deleted: { $ne: true },
+    published: true
   }
 
   const stats = await ArticleModel.aggregate([
@@ -985,9 +976,8 @@ export async function getTopicStatistics(req: Request, res: Response): Promise<v
       
       const latest = await ArticleModel.find({
         topicId: stat._id,
-        parentId: null,
         deleted: { $ne: true },
-        ...(isAdmin ? {} : { published: true })
+        published: true
       })
         .sort({ publishedAt: -1, updatedAt: -1 })
         .limit(3)
