@@ -14,7 +14,10 @@ export default {
     toggleTheme: 'Tema Değiştir',
     signOut: 'Çıkış Yap',
     admin: 'Yönetici',
-    manageTopics: 'Konuları Yönet'
+    manageTopics: 'Konuları Yönet',
+    menu: 'Menü',
+    lightMode: 'Açık Tema',
+    darkMode: 'Koyu Tema'
   },
   auth: {
     login: 'Giriş Yap',

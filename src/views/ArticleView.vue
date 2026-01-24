@@ -33,8 +33,10 @@ const isDeleting = ref(false)
 const showFloatingButtons = ref(false)
 const showMobileToc = ref(false)
 const showMobileScrollButtons = ref(false)
+const showMobileButtons = ref(true)
 const articleHeaderRef = ref<HTMLElement | null>(null)
 let scrollObserver: IntersectionObserver | null = null
+let inactivityTimer: ReturnType<typeof setTimeout> | null = null
 
 // Dialog state
 const dialogOpen = ref(false)
@@ -515,6 +517,26 @@ const scrollToBottom = () => {
   window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })
 }
 
+const resetInactivityTimer = () => {
+  showMobileButtons.value = true
+  
+  if (inactivityTimer) {
+    clearTimeout(inactivityTimer)
+  }
+  
+  inactivityTimer = setTimeout(() => {
+    showMobileButtons.value = false
+  }, 3500) // Hide after 3.5 seconds of inactivity
+}
+
+const handleScroll = () => {
+  resetInactivityTimer()
+}
+
+const handleTouch = () => {
+  resetInactivityTimer()
+}
+
 onMounted(() => {
   loadArticle(articleId.value)
   
@@ -538,6 +560,11 @@ onMounted(() => {
       scrollObserver?.observe(articleHeaderRef.value)
     }
   }, 100)
+  
+  // Setup inactivity detection for mobile buttons
+  window.addEventListener('scroll', handleScroll, { passive: true })
+  window.addEventListener('touchstart', handleTouch, { passive: true })
+  resetInactivityTimer()
 })
 
 watch(() => articleHeaderRef.value, (newRef) => {
@@ -549,6 +576,13 @@ watch(() => articleHeaderRef.value, (newRef) => {
 onUnmounted(() => {
   scrollObserver?.disconnect()
   scrollObserver = null
+  
+  window.removeEventListener('scroll', handleScroll)
+  window.removeEventListener('touchstart', handleTouch)
+  
+  if (inactivityTimer) {
+    clearTimeout(inactivityTimer)
+  }
 })
 
 watch(
@@ -568,26 +602,35 @@ watch(
     @click="showMobileToc = false"
   ></div>
 
+  <!-- Backdrop for mobile scroll buttons -->
+  <div
+    v-if="showMobileScrollButtons"
+    class="toc-backdrop mobile-only"
+    @click="showMobileScrollButtons = false"
+  ></div>
+
   <!-- Mobile TOC Toggle Button (appears on narrow screens) -->
   <button
     class="mobile-toc-toggle mobile-only"
-    @click="showMobileToc = !showMobileToc"
+    :class="{ 'is-visible': showMobileButtons || showMobileToc }"
+    @click="showMobileToc = !showMobileToc; resetInactivityTimer()"
     :title="showMobileToc ? t('toc.close') : t('toc.open')"
     :aria-label="showMobileToc ? t('toc.close') : t('toc.open')"
   >
-    <X v-if="showMobileToc" :size="20" />
-    <List v-else :size="20" />
+    <X v-if="showMobileToc" :size="16" />
+    <List v-else :size="16" />
   </button>
 
   <!-- Mobile Scroll Buttons Toggle (appears on narrow screens) -->
   <button
     class="mobile-scroll-toggle mobile-only"
-    @click="showMobileScrollButtons = !showMobileScrollButtons"
+    :class="{ 'is-visible': showMobileButtons || showMobileScrollButtons }"
+    @click="showMobileScrollButtons = !showMobileScrollButtons; resetInactivityTimer()"
     :title="showMobileScrollButtons ? t('common.close') : t('common.scrollButtons')"
     :aria-label="showMobileScrollButtons ? t('common.close') : t('common.scrollButtons')"
   >
-    <X v-if="showMobileScrollButtons" :size="20" />
-    <ChevronUp v-else :size="20" />
+    <X v-if="showMobileScrollButtons" :size="16" />
+    <ChevronUp v-else :size="16" />
   </button>
 
   <!-- Mobile Scroll Buttons Panel -->
@@ -1109,11 +1152,11 @@ watch(
 }
 
 .floating-scroll-top {
-  bottom: 120px;
+  bottom: 166px;
 }
 
 .floating-scroll-bottom {
-  bottom: 166px;
+  bottom: 120px;
 }
 
 .floating-scroll-top:hover,
@@ -1134,17 +1177,20 @@ watch(
   display: none;
   position: fixed;
   z-index: 998;
-  width: 48px;
-  height: 48px;
+  width: 32px;
+  height: 56px;
   align-items: center;
   justify-content: center;
-  background: var(--accent-color);
-  color: white;
-  border: none;
-  border-radius: 4px;
+  background: linear-gradient(to left, var(--surface-color), rgba(var(--surface-color-rgb, 255, 255, 255), 0.95));
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  border-right: none;
+  border-radius: 8px 0 0 8px;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  transition: all 0.2s ease;
+  box-shadow: -2px 0 6px rgba(0, 0, 0, 0.04);
+  opacity: 0.35;
+  transition: opacity 0.3s ease, width 0.2s ease, box-shadow 0.2s ease;
+  backdrop-filter: blur(4px);
 }
 
 .mobile-only {
@@ -1166,27 +1212,50 @@ watch(
   }
 }
 
-.mobile-toc-toggle:hover,
-.mobile-scroll-toggle:hover {
-  transform: scale(1.05);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+.mobile-toc-toggle.is-visible,
+.mobile-scroll-toggle.is-visible {
+  opacity: 0.8;
+  width: 40px;
+  box-shadow: -3px 0 10px rgba(0, 0, 0, 0.08);
+}
+
+.mobile-toc-toggle:active,
+.mobile-scroll-toggle:active {
+  opacity: 1;
+  background: var(--surface-color);
+  color: var(--accent-color);
 }
 
 .mobile-toc-toggle {
-  top: 120px;
-  right: 1rem;
+  top: 140px;
+  right: 0;
 }
 
 .mobile-scroll-toggle {
-  bottom: 1rem;
-  right: 1rem;
+  bottom: 24px;
+  right: 0;
+}
+
+/* Touch devices: prevent hover effects */
+@media (hover: none) {
+  .mobile-toc-toggle:hover,
+  .mobile-scroll-toggle:hover {
+    opacity: 0.35;
+    width: 32px;
+  }
+  
+  .mobile-toc-toggle.is-visible:hover,
+  .mobile-scroll-toggle.is-visible:hover {
+    opacity: 0.8;
+    width: 40px;
+  }
 }
 
 .mobile-scroll-panel {
   position: fixed;
   bottom: 80px;
   right: 1rem;
-  z-index: 997;
+  z-index: 999;
   background: var(--surface-color);
   border: 1px solid var(--border-color);
   border-radius: 8px;
@@ -1225,7 +1294,7 @@ watch(
   right: 0;
   bottom: 0;
   background: rgba(0, 0, 0, 0.5);
-  z-index: 998;
+  z-index: 997;
   animation: fadeIn 0.2s ease;
 }
 

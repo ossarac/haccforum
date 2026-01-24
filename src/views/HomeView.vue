@@ -353,6 +353,23 @@ const getTopicColor = (topicId: string) => {
   gap: 1.5rem;
 }
 
+@media (max-width: 768px) {
+  .recent-section {
+    gap: 1rem;
+  }
+
+  .recent-section::after {
+    content: '← Swipe to see more →';
+    display: block;
+    text-align: center;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    opacity: 0.6;
+    margin-top: -0.5rem;
+    font-style: italic;
+  }
+}
+
 .section-header {
   display: flex;
   flex-direction: column;
@@ -391,6 +408,37 @@ const getTopicColor = (topicId: string) => {
   padding: 0.25rem;
 }
 
+@media (max-width: 768px) {
+  .recent-articles-scroll {
+    display: flex;
+    overflow-x: auto;
+    gap: 1rem;
+    padding: 0.5rem 0.25rem;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-color) transparent;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .recent-articles-scroll::-webkit-scrollbar {
+    height: 6px;
+  }
+
+  .recent-articles-scroll::-webkit-scrollbar-track {
+    background: transparent;
+    margin: 0 1rem;
+  }
+
+  .recent-articles-scroll::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 3px;
+  }
+
+  .recent-articles-scroll::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
+  }
+}
+
 .recent-card {
   background: var(--surface-color);
   border: 1px solid var(--border-color);
@@ -403,6 +451,17 @@ const getTopicColor = (topicId: string) => {
   gap: 0.75rem;
   position: relative;
   overflow: hidden;
+}
+
+@media (max-width: 768px) {
+  .recent-card {
+    min-width: 280px;
+    max-width: 280px;
+    padding: 1rem;
+    gap: 0.6rem;
+    scroll-snap-align: start;
+    flex-shrink: 0;
+  }
 }
 
 .recent-card.is-reply {
@@ -488,6 +547,13 @@ const getTopicColor = (topicId: string) => {
   line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+@media (max-width: 768px) {
+  .recent-card-title {
+    font-size: 1rem;
+    line-height: 1.3;
+  }
 }
 
 .recent-card-meta {
@@ -744,9 +810,7 @@ const getTopicColor = (topicId: string) => {
     font-size: 1rem;
   }
 
-  .recent-articles-scroll {
-    grid-template-columns: 1fr;
-  }
+
 
   .topics-grid {
     grid-template-columns: 1fr;

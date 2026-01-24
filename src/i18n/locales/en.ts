@@ -14,7 +14,10 @@ export default {
     toggleTheme: 'Toggle Theme',
     signOut: 'Sign Out',
     admin: 'Admin',
-    manageTopics: 'Manage Topics'
+    manageTopics: 'Manage Topics',
+    menu: 'Menu',
+    lightMode: 'Light Mode',
+    darkMode: 'Dark Mode'
   },
   auth: {
     login: 'Login',
