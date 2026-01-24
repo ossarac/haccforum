@@ -6,6 +6,8 @@ import { ChevronDown, ChevronRight, Edit2, Trash2, Plus } from 'lucide-vue-next'
 interface Props {
   topic: Topic
   expandedTopics: Set<string>
+  currentUserId?: string
+  isAdmin?: boolean
 }
 
 interface Emits {
@@ -20,6 +22,8 @@ const emit = defineEmits<Emits>()
 
 const children = computed(() => props.topic.children || [])
 const isExpanded = computed(() => props.expandedTopics.has(props.topic.id))
+const canEdit = computed(() => props.isAdmin || props.topic.createdBy.id === props.currentUserId)
+const canDelete = computed(() => props.isAdmin || props.topic.createdBy.id === props.currentUserId)
 
 const toggleExpand = () => {
   emit('expand', props.topic.id)
@@ -71,6 +75,7 @@ const handleCreateChild = () => {
           <Plus :size="16" />
         </button>
         <button
+          v-if="canEdit"
           class="action-btn"
           @click="handleEdit"
           title="Edit topic"
@@ -79,6 +84,7 @@ const handleCreateChild = () => {
           <Edit2 :size="16" />
         </button>
         <button
+          v-if="canDelete"
           class="action-btn delete-btn"
           @click="handleDelete"
           title="Delete topic"
@@ -95,6 +101,8 @@ const handleCreateChild = () => {
         :key="child.id"
         :topic="child"
         :expanded-topics="expandedTopics"
+        :current-user-id="currentUserId"
+        :is-admin="isAdmin"
         @expand="emit('expand', $event)"
         @edit="emit('edit', $event)"
         @delete="emit('delete', $event)"

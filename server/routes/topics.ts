@@ -26,7 +26,7 @@ router.post('/', authenticate, requireAnyRole('admin', 'editor'), createTopic)
 // Update topic (admin/editor only)
 router.patch('/:id', authenticate, requireAnyRole('admin', 'editor'), updateTopic)
 
-// Delete topic (admin only)
-router.delete('/:id', authenticate, requireAnyRole('admin'), deleteTopic)
+// Delete topic (admin or creator only - creator check in controller)
+router.delete('/:id', authenticate, deleteTopic)
 
 export default router

@@ -189,11 +189,6 @@ export async function createTopic(req: Request, res: Response): Promise<void> {
 
 export async function updateTopic(req: Request, res: Response): Promise<void> {
   try {
-    if (!isAdminOrEditor(req)) {
-      res.status(403).json({ error: t('onlyAdminsAndEditorsCanUpdate', req) })
-      return
-    }
-
     const { id } = req.params
     const { name, description } = req.body
 
@@ -206,6 +201,13 @@ export async function updateTopic(req: Request, res: Response): Promise<void> {
 
     if (!topic || topic.deleted) {
       res.status(404).json({ error: t('topicNotFound', req) })
+      return
+    }
+
+    // Check if user is admin or the creator of the topic
+    const isCreator = topic.createdBy.toString() === req.user?.id
+    if (!isAdmin(req) && !isCreator) {
+      res.status(403).json({ error: t('onlyAdminsOrCreatorCanUpdate', req) })
       return
     }
 
@@ -233,11 +235,6 @@ export async function updateTopic(req: Request, res: Response): Promise<void> {
 
 export async function deleteTopic(req: Request, res: Response): Promise<void> {
   try {
-    if (!isAdmin(req)) {
-      res.status(403).json({ error: t('onlyAdminsCanDelete', req) })
-      return
-    }
-
     const { id } = req.params
 
     if (!Types.ObjectId.isValid(id)) {
@@ -252,16 +249,24 @@ export async function deleteTopic(req: Request, res: Response): Promise<void> {
       return
     }
 
-    // Check if topic has articles
-    const articleCount = await ArticleModel.countDocuments({
+    // Check if user is admin or the creator of the topic
+    const isCreator = topic.createdBy.toString() === req.user?.id
+    if (!isAdmin(req) && !isCreator) {
+      res.status(403).json({ error: t('onlyAdminsOrCreatorCanDelete', req) })
+      return
+    }
+
+    // Check if topic has published articles (drafts are allowed)
+    const publishedArticleCount = await ArticleModel.countDocuments({
       topicId: id,
-      deleted: false
+      deleted: false,
+      published: true
     })
 
-    if (articleCount > 0) {
+    if (publishedArticleCount > 0) {
       res.status(400).json({
         error: t('cannotDeleteTopicWithArticles', req),
-        articleCount
+        articleCount: publishedArticleCount
       })
       return
     }
@@ -278,6 +283,27 @@ export async function deleteTopic(req: Request, res: Response): Promise<void> {
         childCount
       })
       return
+    }
+
+    // Move draft articles to parent topic or set to null
+    const draftArticles = await ArticleModel.find({
+      topicId: id,
+      deleted: false,
+      published: false
+    })
+
+    if (draftArticles.length > 0) {
+      const fallbackTopicId = topic.parentId || null
+      await ArticleModel.updateMany(
+        {
+          topicId: id,
+          deleted: false,
+          published: false
+        },
+        {
+          $set: { topicId: fallbackTopicId }
+        }
+      )
     }
 
     // Soft delete

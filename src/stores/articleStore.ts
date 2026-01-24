@@ -130,13 +130,22 @@ export const useArticleStore = defineStore('article', () => {
             if (!current) {
                 throw new Error('Article state out of date. Reload and try again.')
             }
-            const payload = {
+            
+            // Determine if this article is or will be a child article
+            const isChildArticle = (input.parentId ?? current.parentId) !== null
+            
+            const payload: any = {
                 title: input.title,
                 content: input.content,
                 authorName: input.authorName,
                 parentId: input.parentId ?? null,
-                topicId: input.topicId ?? null,
                 version: current.version
+            }
+            
+            // Only include topicId for root articles (no parentId)
+            // Child articles inherit their parent's topic and cannot change it
+            if (!isChildArticle) {
+                payload.topicId = input.topicId ?? null
             }
 
             const response = await apiRequest<{ article: Article }>(`/articles/${input.id}`, {

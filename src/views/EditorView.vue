@@ -547,14 +547,16 @@ const exportHtml = () => {
               :disabled="isPreviewMode"
             />
           </div>
-          <!-- Topic selector - only for root articles -->
-          <div v-if="!parentId" class="topic-selector-container">
-            <label for="topic-select">{{ t('editor.selectTopic') }}:</label>
+          <!-- Topic selector - shown for all articles, but disabled for replies -->
+          <div class="topic-selector-container">
+            <label for="topic-select">
+              {{ t('editor.selectTopic') }}{{ parentId ? ` (${t('editor.inheritedFromParent')})` : '' }}:
+            </label>
             <select 
               id="topic-select"
               v-model="topicId" 
               class="topic-select"
-              :disabled="isPreviewMode || !canChangeTopic"
+              :disabled="isPreviewMode || !canChangeTopic || !!parentId"
             >
               <option value="">{{ t('editor.selectATopicPlaceholder') }}</option>
               <option 

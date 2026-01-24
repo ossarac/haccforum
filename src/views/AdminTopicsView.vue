@@ -84,7 +84,10 @@ const openDeleteDialog = (topic: Topic) => {
   dialogMessage.value = t('admin.cannotBeUndone')
   dialogType.value = 'confirm'
   pendingAction.value = async () => {
-    await topicStore.deleteTopic(topic.id)
+    const success = await topicStore.deleteTopic(topic.id)
+    if (!success && topicStore.error) {
+      throw new Error(topicStore.error)
+    }
   }
   showDialog.value = true
 }
@@ -96,11 +99,18 @@ const saveTopic = async () => {
   }
 
   try {
+    let result
     if (isCreating.value) {
-      await topicStore.createTopic(topicName.value, topicDescription.value, parentTopicId.value)
+      result = await topicStore.createTopic(topicName.value, topicDescription.value, parentTopicId.value)
     } else if (isEditing.value && selectedTopic.value) {
-      await topicStore.updateTopic(selectedTopic.value.id, topicName.value, topicDescription.value)
+      result = await topicStore.updateTopic(selectedTopic.value.id, topicName.value, topicDescription.value)
     }
+    
+    if (!result && topicStore.error) {
+      alert(topicStore.error)
+      return
+    }
+    
     showDialog.value = false
     topicName.value = ''
     topicDescription.value = ''
@@ -152,6 +162,8 @@ const handleDialogClose = () => {
         <TopicNode 
           :topic="topic" 
           :expanded-topics="expandedTopics"
+          :current-user-id="auth.user?.id"
+          :is-admin="auth.user?.roles.includes('admin') ?? false"
           @expand="toggleExpanded" 
           @edit="openEditDialog" 
           @delete="openDeleteDialog" 

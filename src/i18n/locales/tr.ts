@@ -44,6 +44,7 @@ export default {
     save: 'Kaydet',
     saveDraft: 'Taslak Olarak Kaydet',
     selectTopic: 'Konu Seç',
+    inheritedFromParent: 'Üst Makaleden Miras Alındı',
     selectATopicPlaceholder: '-- Bir Konu Seçin --',
     noTopic: 'Konu Yok',
     untitled: 'Başlıksız',

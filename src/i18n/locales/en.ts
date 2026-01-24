@@ -44,6 +44,7 @@ export default {
     save: 'Save',
     saveDraft: 'Save as Draft',
     selectTopic: 'Select Topic',
+    inheritedFromParent: 'Inherited from Parent',
     selectATopicPlaceholder: '-- Select a Topic --',
     noTopic: 'No Topic',
     untitled: 'Untitled',
