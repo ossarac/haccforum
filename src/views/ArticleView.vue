@@ -54,7 +54,7 @@ const canDuplicate = computed(() => {
 
 const canExport = computed(() => {
   if (!auth.user || !article.value) return false
-  return article.value.author.id === auth.user.id || auth.user.roles.includes('admin')
+  return true
 })
 
 const canUnpublish = computed(() => {
@@ -645,17 +645,17 @@ watch(
         <span class="flex-row gap-2"><Calendar :size="14" /> {{ formatDate(article.createdAt) }}</span>
       </div>
 
-      <div v-if="isAuthor || canDelete" class="author-actions flex-row flex-wrap gap-2">
+      <div v-if="canExport || isAuthor || canDelete" class="author-actions flex-row flex-wrap gap-2">
+        <button
+          v-if="canExport"
+          class="secondary-btn flex-row gap-2"
+          :disabled="isExporting"
+          @click="exportArticle"
+        >
+          <Download :size="16" />
+          <span>{{ isExporting ? 'Preparing…' : t('article.export') }}</span>
+        </button>
         <template v-if="isAuthor">
-          <button
-            v-if="canExport"
-            class="secondary-btn flex-row gap-2"
-            :disabled="isExporting"
-            @click="exportArticle"
-          >
-            <Download :size="16" />
-            <span>{{ isExporting ? 'Preparing…' : t('article.export') }}</span>
-          </button>
           <button
             v-if="canDuplicate"
             class="secondary-btn flex-row gap-2"

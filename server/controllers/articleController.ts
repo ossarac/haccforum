@@ -718,18 +718,15 @@ export async function exportArticle(req: Request, res: Response): Promise<void> 
     return
   }
 
-  const isAuthor = article.author.equals(new Types.ObjectId(req.user.id))
-  const isAdmin = req.user.roles?.includes('admin')
-  if (!isAuthor && !isAdmin) {
-    res.status(403).json({ message: t('noPermissionToExport', req) })
-    return
-  }
-
   const author = article.author as unknown as { name?: string; readingPreferences?: any }
+  
+  // Get the exporting user's preferences to apply their reading style to the export
+  const exportingUser = await UserModel.findById(req.user.id)
+  
   const { filename, html } = buildArticleExportHtml({
     article,
     authorName: article.authorName || author?.name || 'Unknown',
-    prefs: author?.readingPreferences
+    prefs: exportingUser?.readingPreferences
   })
 
   res.setHeader('Content-Type', 'text/html')
