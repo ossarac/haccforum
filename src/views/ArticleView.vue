@@ -882,7 +882,7 @@ watch(
   font-weight: 800;
   margin-bottom: 0.5rem;
   letter-spacing: -0.03em;
-  font-family: var(--font-serif);
+  /* font-family: var(--font-serif); */
 }
 
 .article-meta {

@@ -277,7 +277,7 @@ const getTopicColor = (topicId: string) => {
   font-weight: 800;
   margin: 0 0 0.5rem 0;
   color: var(--text-color);
-  font-family: var(--font-serif);
+  /* font-family: var(--font-serif); */
   letter-spacing: -0.02em;
 }
 
@@ -391,7 +391,7 @@ const getTopicColor = (topicId: string) => {
   font-weight: 700;
   margin: 0;
   color: var(--text-color);
-  font-family: var(--font-serif);
+  /* font-family: var(--font-serif); */
 }
 
 .section-subtitle {
@@ -646,7 +646,7 @@ const getTopicColor = (topicId: string) => {
   font-weight: 700;
   margin: 0;
   color: var(--text-color);
-  font-family: var(--font-serif);
+  /* font-family: var(--font-serif); */
   line-height: 1.3;
 }
 

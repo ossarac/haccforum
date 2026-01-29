@@ -8,6 +8,10 @@
   --accent-hover: #1d4ed8;
   --danger-color: #ef4444;
 
+  /* Font Variables */
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-serif: 'Merriweather', Georgia, serif;
+
   /* Layout Variables */
   --container-width: 1024px;
 }
@@ -37,6 +41,7 @@ body {
   transition: background-color 0.3s ease, color 0.3s ease;
   background-color: var(--bg-color);
   /* Ensure body has bg color */
+  font-family: var(--font-sans);
   line-height: 1.5; /* Reset to standard UI line-height */
 }
 
