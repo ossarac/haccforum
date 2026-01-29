@@ -1165,7 +1165,7 @@ watch(
   color: var(--accent-color);
 }
 
-@media (max-width: 1350px) {
+@media (max-width: 1550px) {
   .floating-scroll-top,
   .floating-scroll-bottom {
     display: none;
@@ -1197,7 +1197,7 @@ watch(
   display: none;
 }
 
-@media (max-width: 1350px) {
+@media (max-width: 1550px) {
   .mobile-only {
     display: flex;
   }

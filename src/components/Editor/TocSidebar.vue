@@ -106,7 +106,7 @@ onUnmounted(() => {
 
   position: fixed;
   top: var(--toc-offset);
-  left: max(2rem, calc(50% - 680px)); /* Symmetrically placed on left. 425px (half content) + 25px gap + 230px width */
+  left: max(2rem, calc(50% - 820px)); /* Pushed further left for better separation */
   width: 200px;
   max-height: calc(100vh - var(--toc-offset) - var(--toc-bottom-gap));
   overflow-y: auto;
@@ -182,7 +182,7 @@ li:hover {
   background: var(--text-secondary);
 }
 
-@media (max-width: 1350px) {
+@media (max-width: 1550px) {
   .toc-sidebar {
     display: none; /* Hide by default on smaller screens */
     position: fixed;
