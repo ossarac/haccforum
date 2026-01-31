@@ -17,7 +17,6 @@ const mobileMenuOpen = ref(false)
 
 const userName = computed(() => user.value?.name || user.value?.email || 'User')
 const isAdmin = computed(() => auth.hasRole('admin'))
-const isWriter = computed(() => auth.hasRole('writer'))
 const canWrite = computed(() => auth.canWrite)
 const adminDropdownOpen = ref(false)
 const mobileAdminExpanded = ref(false)
