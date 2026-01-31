@@ -9,15 +9,24 @@ export interface ReadingPreferences {
   docWidthId?: string
 }
 
+export type UserRole = 'admin' | 'writer' | 'viewer'
+export type UserStatus = 'pending' | 'approved' | 'rejected'
+
 export interface UserDocument extends Document {
   email: string
   name: string
   passwordHash: string
-  roles: string[]
+  roles: UserRole[]
+  status: UserStatus
+  requestedRole?: UserRole
+  applicationNote?: string
+  adminNote?: string
   emailVerified: boolean
   language?: string
   readingPreferences?: ReadingPreferences
   comparePassword(password: string): Promise<boolean>
+  createdAt: Date
+  updatedAt: Date
 }
 
 const userSchema = new Schema<UserDocument>(
@@ -40,8 +49,25 @@ const userSchema = new Schema<UserDocument>(
     },
     roles: {
       type: [String],
-      enum: ['admin', 'editor', 'viewer'],
-      default: ['editor']
+      enum: ['admin', 'writer', 'viewer'],
+      default: ['viewer']
+    },
+    status: {
+      type: String,
+      enum: ['pending', 'approved', 'rejected'],
+      default: 'pending'
+    },
+    requestedRole: {
+      type: String,
+      enum: ['admin', 'writer', 'viewer']
+    },
+    applicationNote: {
+      type: String,
+      maxlength: 2000
+    },
+    adminNote: {
+      type: String,
+      maxlength: 1000
     },
     emailVerified: {
       type: Boolean,

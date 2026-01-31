@@ -44,8 +44,8 @@ function formatTopic(topic: TopicDocument & { createdBy: any }): TopicResponse {
   }
 }
 
-function isAdminOrEditor(req: Request): boolean {
-  return req.user?.roles?.includes('admin') || req.user?.roles?.includes('editor') ? true : false
+function isAdminOrWriter(req: Request): boolean {
+  return req.user?.roles?.includes('admin') || req.user?.roles?.includes('writer') ? true : false
 }
 
 function isAdmin(req: Request): boolean {
@@ -137,8 +137,8 @@ export async function getTopicWithChildren(req: Request, res: Response): Promise
 
 export async function createTopic(req: Request, res: Response): Promise<void> {
   try {
-    if (!isAdminOrEditor(req)) {
-      res.status(403).json({ error: t('onlyAdminsAndEditorsCanCreate', req) })
+    if (!isAdminOrWriter(req)) {
+      res.status(403).json({ error: t('onlyAdminsAndWritersCanCreate', req) })
       return
     }
 
@@ -249,10 +249,9 @@ export async function deleteTopic(req: Request, res: Response): Promise<void> {
       return
     }
 
-    // Check if user is admin or the creator of the topic
-    const isCreator = topic.createdBy.toString() === req.user?.id
-    if (!isAdmin(req) && !isCreator) {
-      res.status(403).json({ error: t('onlyAdminsOrCreatorCanDelete', req) })
+    // Only admins can delete topics
+    if (!isAdmin(req)) {
+      res.status(403).json({ error: t('onlyAdminsCanDelete', req) })
       return
     }
 
@@ -317,6 +316,113 @@ export async function deleteTopic(req: Request, res: Response): Promise<void> {
   } catch (error) {
     console.error('[topics] deleteTopic error', error)
     res.status(500).json({ error: t('failedToDeleteTopic', req) })
+  }
+}
+
+export async function mergeTopics(req: Request, res: Response): Promise<void> {
+  try {
+    if (!isAdmin(req)) {
+      res.status(403).json({ error: t('onlyAdminsCanMerge', req) })
+      return
+    }
+
+    const { sourceId, targetId, dryRun = false, deleteSource = true } = req.body as {
+      sourceId?: string
+      targetId?: string
+      dryRun?: boolean
+      deleteSource?: boolean
+    }
+
+    if (!sourceId || !targetId) {
+      res.status(400).json({ error: t('mergeSourceTargetRequired', req) })
+      return
+    }
+
+    if (!Types.ObjectId.isValid(sourceId) || !Types.ObjectId.isValid(targetId)) {
+      res.status(400).json({ error: t('invalidTopicID', req) })
+      return
+    }
+
+    if (sourceId === targetId) {
+      res.status(400).json({ error: t('mergeMustDiffer', req) })
+      return
+    }
+
+    const source = await TopicModel.findById(sourceId)
+    const target = await TopicModel.findById(targetId)
+
+    if (!source || source.deleted) {
+      res.status(404).json({ error: t('topicNotFound', req) })
+      return
+    }
+
+    if (!target || target.deleted) {
+      res.status(404).json({ error: t('targetTopicNotFound', req) })
+      return
+    }
+
+    // Prevent cycles: target cannot be a descendant of source
+    const targetAncestors = (target.ancestors || []).map(id => id.toString())
+    if (targetAncestors.includes(sourceId)) {
+      res.status(400).json({ error: t('mergeCycleNotAllowed', req) })
+      return
+    }
+
+    // Gather stats
+    const movedArticles = await ArticleModel.countDocuments({ topicId: sourceId, deleted: false })
+    const descendantTopics = await TopicModel.find({ ancestors: sourceId, deleted: false }).lean()
+    const reparentedTopics = descendantTopics.length
+
+    if (dryRun) {
+      res.json({
+        sourceId,
+        targetId,
+        movedArticles,
+        reparentedTopics,
+        message: t('mergeDryRun', req)
+      })
+      return
+    }
+
+    // Move articles from source to target
+    await ArticleModel.updateMany(
+      { topicId: sourceId, deleted: false },
+      { $set: { topicId: targetId } }
+    )
+
+    // Reparent descendants by rewriting ancestors
+    const targetAncestorIds = [new Types.ObjectId(targetId), ...target.ancestors]
+    const descendantDocs = await TopicModel.find({ ancestors: sourceId, deleted: false })
+
+    for (const doc of descendantDocs) {
+      const ancestors = doc.ancestors.map(id => id.toString())
+      const idx = ancestors.indexOf(sourceId)
+      const suffixIds = idx >= 0 ? ancestors.slice(idx + 1) : []
+      const newAncestors = [...targetAncestorIds, ...suffixIds.map(id => new Types.ObjectId(id))]
+
+      if (doc.parentId && doc.parentId.toString() === sourceId) {
+        doc.parentId = new Types.ObjectId(targetId)
+      }
+      doc.ancestors = newAncestors
+      await doc.save()
+    }
+
+    // Optionally delete source topic after moving
+    if (deleteSource) {
+      source.deleted = true
+      await source.save()
+    }
+
+    res.json({
+      sourceId,
+      targetId,
+      movedArticles,
+      reparentedTopics,
+      message: t('mergeCompleted', req)
+    })
+  } catch (error) {
+    console.error('[topics] mergeTopics error', error)
+    res.status(500).json({ error: t('failedToMergeTopics', req) })
   }
 }
 

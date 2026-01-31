@@ -9,6 +9,7 @@ export function serializeUser(user: UserDocument): AuthUser {
     email: user.email,
     name: user.name,
     roles: user.roles,
+    status: user.status,
     emailVerified: user.emailVerified,
     language: user.language,
     readingPreferences: user.readingPreferences

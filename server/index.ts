@@ -10,6 +10,7 @@ import authRoutes from './routes/auth.js'
 import articleRoutes from './routes/articles.js'
 import topicRoutes from './routes/topics.js'
 import uploadRoutes from './routes/uploads.js'
+import adminRoutes from './routes/admin.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -35,6 +36,7 @@ app.use('/api/auth', authRoutes)
 app.use('/api/topics', topicRoutes)
 app.use('/api/articles', articleRoutes)
 app.use('/api/upload', uploadRoutes)
+app.use('/api/admin', adminRoutes)
 
 // Serve frontend static files (in production)
 // In Docker, we copy frontend to dist/client, and server runs from dist/server

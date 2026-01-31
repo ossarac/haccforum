@@ -20,6 +20,13 @@ export interface Topic {
   articleCount?: number
 }
 
+interface MergePreview {
+  sourceId: string
+  targetId: string
+  movedArticles: number
+  reparentedTopics: number
+}
+
 export const useTopicStore = defineStore('topic', () => {
   const topics = ref<Topic[]>([])
   const topicsById = reactive<Record<string, Topic>>({})
@@ -30,11 +37,23 @@ export const useTopicStore = defineStore('topic', () => {
 
   // Flat list of all topics with indentation for display
   const flatTopicList = computed(() => {
-    const result: (Topic & { indent: number; displayName: string })[] = []
+    const result: (Topic & { indent: number; displayName: string; displayPath: string })[] = []
     
     const addTopicAndChildren = (topic: Topic, indent: number) => {
       const prefix = indent > 0 ? '  '.repeat(indent) + '\u2514\u2500 ' : ''
-      result.push({ ...topic, indent, displayName: prefix + topic.name })
+      const pathNames: string[] = []
+      let current: Topic | undefined = topic
+      while (current) {
+        pathNames.unshift(current.name)
+        current = current.parentId ? topicsById[current.parentId] : undefined
+      }
+
+      result.push({
+        ...topic,
+        indent,
+        displayName: prefix + topic.name,
+        displayPath: pathNames.join(' / ')
+      })
       
       // Find and add children
       const children = topics.value.filter(t => t.parentId === topic.id)
@@ -226,6 +245,40 @@ export const useTopicStore = defineStore('topic', () => {
     }
   }
 
+  const mergeTopics = async (params: {
+    sourceId: string
+    targetId: string
+    dryRun?: boolean
+    deleteSource?: boolean
+  }): Promise<MergePreview | null> => {
+    loading.value = true
+    error.value = null
+    try {
+      const data = await apiRequest<{
+        sourceId: string
+        targetId: string
+        movedArticles: number
+        reparentedTopics: number
+        message?: string
+      }>(`/topics/merge`, {
+        method: 'POST',
+        body: JSON.stringify(params)
+      })
+      return {
+        sourceId: data.sourceId,
+        targetId: data.targetId,
+        movedArticles: data.movedArticles,
+        reparentedTopics: data.reparentedTopics
+      }
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to merge topics'
+      console.error('[topicStore] mergeTopics error:', err)
+      return null
+    } finally {
+      loading.value = false
+    }
+  }
+
   return {
     topics,
     topicsById,
@@ -239,6 +292,7 @@ export const useTopicStore = defineStore('topic', () => {
     fetchTopic,
     createTopic,
     updateTopic,
-    deleteTopic
+    deleteTopic,
+    mergeTopics
   }
 })

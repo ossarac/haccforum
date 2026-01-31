@@ -5,28 +5,32 @@ import {
   createTopic,
   updateTopic,
   deleteTopic,
-  getTopicPath
+  getTopicPath,
+  mergeTopics
 } from '../controllers/topicController.js'
-import { authenticate, optionalAuthenticate, requireAnyRole } from '../middleware/auth.js'
+import { authenticate, optionalAuthenticate, requireAnyRole, requireAuthIfGuestDisabled } from '../middleware/auth.js'
 
 const router = Router()
 
-// List all root topics
-router.get('/', optionalAuthenticate, listTopics)
+// List all root topics - check guest access
+router.get('/', optionalAuthenticate, requireAuthIfGuestDisabled, listTopics)
 
-// Get topic with children
-router.get('/:id', optionalAuthenticate, getTopicWithChildren)
+// Merge topics (admin only) - keep before dynamic :id routes
+router.post('/merge', authenticate, requireAnyRole('admin'), mergeTopics)
 
-// Get topic path (breadcrumb)
-router.get('/:id/path', optionalAuthenticate, getTopicPath)
+// Get topic with children - check guest access
+router.get('/:id', optionalAuthenticate, requireAuthIfGuestDisabled, getTopicWithChildren)
 
-// Create topic (admin/editor only)
-router.post('/', authenticate, requireAnyRole('admin', 'editor'), createTopic)
+// Get topic path (breadcrumb) - check guest access
+router.get('/:id/path', optionalAuthenticate, requireAuthIfGuestDisabled, getTopicPath)
 
-// Update topic (admin/editor only)
-router.patch('/:id', authenticate, requireAnyRole('admin', 'editor'), updateTopic)
+// Create topic (admin or writer)
+router.post('/', authenticate, requireAnyRole('admin', 'writer'), createTopic)
 
-// Delete topic (admin or creator only - creator check in controller)
-router.delete('/:id', authenticate, deleteTopic)
+// Update topic (admin or writer)
+router.patch('/:id', authenticate, requireAnyRole('admin', 'writer'), updateTopic)
+
+// Delete topic (admin only)
+router.delete('/:id', authenticate, requireAnyRole('admin'), deleteTopic)
 
 export default router

@@ -11,11 +11,15 @@ interface ReadingPreferences {
   docWidthId?: string
 }
 
+type UserRole = 'admin' | 'writer' | 'viewer'
+type UserStatus = 'pending' | 'approved' | 'rejected'
+
 interface AuthUser {
   id: string
   email: string
   name: string
-  roles: string[]
+  roles: UserRole[]
+  status: UserStatus
   emailVerified: boolean
   language?: string
   readingPreferences?: ReadingPreferences
@@ -24,6 +28,14 @@ interface AuthUser {
 interface AuthResponse {
   token: string
   user: AuthUser
+}
+
+interface RegisterPayload {
+  email: string
+  name: string
+  password: string
+  requestedRole?: UserRole
+  applicationNote?: string
 }
 
 const TOKEN_KEY = 'haccedit_token'
@@ -38,7 +50,11 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   const isAuthenticated = computed(() => Boolean(user.value && token.value))
-  const hasRole = (role: 'admin' | 'editor' | 'viewer') => Boolean(user.value?.roles.includes(role))
+  const isApproved = computed(() => user.value?.status === 'approved')
+  const isPending = computed(() => user.value?.status === 'pending')
+  const isRejected = computed(() => user.value?.status === 'rejected')
+  const hasRole = (role: UserRole) => Boolean(user.value?.roles.includes(role))
+  const canWrite = computed(() => isApproved.value && (hasRole('admin') || hasRole('writer')))
 
   const setSession = (value: AuthResponse | null) => {
     if (value) {
@@ -70,10 +86,11 @@ export const useAuthStore = defineStore('auth', () => {
     return response.user
   }
 
-  const register = async (payload: { email: string; name: string; password: string; roles?: string[] }) => {
+  const register = async (payload: RegisterPayload) => {
     const response = await apiRequest<AuthResponse>('/auth/register', {
       method: 'POST',
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
+      skipAuth: true
     })
     setSession(response)
     return response.user
@@ -135,7 +152,11 @@ export const useAuthStore = defineStore('auth', () => {
     token,
     initialised,
     isAuthenticated,
+    isApproved,
+    isPending,
+    isRejected,
     hasRole,
+    canWrite,
     login,
     register,
     loadSession,

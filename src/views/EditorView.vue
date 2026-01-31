@@ -42,6 +42,10 @@ const dialogTitle = ref('')
 const dialogMessage = ref('')
 const dialogType = ref<'alert' | 'confirm' | 'input'>('alert')
 const pendingPublishCallback = ref<(() => void) | null>(null)
+const showNewTopicInput = ref(false)
+const newTopicName = ref('')
+const parentTopicId = ref<string | null>(null)
+const isCreatingTopic = ref(false)
 
 const currentArticleId = computed(() => (route.params.id as string | undefined) ?? null)
 const currentArticle = computed(() => (currentArticleId.value ? store.getArticle(currentArticleId.value) : null))
@@ -217,9 +221,23 @@ const saveDraft = async () => {
  * Publish article - saves content and marks article as published
  * This makes it visible on the dashboard
  */
+const openNewTopicInput = () => {
+  if (!showNewTopicInput.value) {
+    parentTopicId.value = topicId.value
+  }
+  showNewTopicInput.value = !showNewTopicInput.value
+}
+
 const publish = async () => {
   if (!title.value.trim()) {
     showAlert(t('editor.validationError'), t('editor.pleaseEnterTitle'))
+    return
+  }
+
+  // Root articles must have a topic selected before publishing
+  if (!parentId.value && !topicId.value) {
+    showAlert(t('editor.validationError'), t('editor.topicRequiredForPublish'))
+    showNewTopicInput.value = true
     return
   }
 
@@ -240,6 +258,30 @@ const publish = async () => {
       await doPublish()
     }
   )
+}
+
+const createTopicInline = async () => {
+  const name = newTopicName.value.trim()
+  if (!name) {
+    showAlert(t('editor.validationError'), t('editor.enterTopicName'))
+    return
+  }
+
+  isCreatingTopic.value = true
+  try {
+    const created = await topicStore.createTopic(name, undefined, parentTopicId.value || null)
+    if (created) {
+      topicId.value = created.id
+      newTopicName.value = ''
+      showNewTopicInput.value = false
+      parentTopicId.value = created.parentId
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : t('editor.failedToCreateTopic')
+    showAlert(t('editor.errorCreatingTopic'), message)
+  } finally {
+    isCreatingTopic.value = false
+  }
 }
 
 const doPublish = async () => {
@@ -564,9 +606,48 @@ const exportHtml = () => {
                 :key="topic.id" 
                 :value="topic.id"
               >
-                {{ topic.displayName }}
+                {{ topic.displayPath }}
               </option>
             </select>
+            <button
+              v-if="!parentId && canChangeTopic"
+              type="button"
+              class="new-topic-btn"
+              @click="openNewTopicInput"
+            >
+              {{ showNewTopicInput ? t('common.close') : t('editor.createTopic') }}
+            </button>
+          </div>
+          <div v-if="showNewTopicInput && !parentId" class="new-topic-inline">
+            <input
+              v-model="newTopicName"
+              type="text"
+              class="new-topic-input"
+              :placeholder="t('editor.newTopicNamePlaceholder')"
+              :disabled="isCreatingTopic"
+            />
+            <select
+              v-model="parentTopicId"
+              class="new-topic-parent-select"
+              :disabled="isCreatingTopic"
+            >
+              <option :value="null">{{ t('editor.noParentTopic') }}</option>
+              <option
+                v-for="topic in topicStore.flatTopicList"
+                :key="topic.id"
+                :value="topic.id"
+              >
+                {{ topic.displayPath }}
+              </option>
+            </select>
+            <button
+              type="button"
+              class="secondary-btn"
+              @click="createTopicInline"
+              :disabled="isCreatingTopic"
+            >
+              {{ isCreatingTopic ? t('common.saving') : t('common.create') }}
+            </button>
           </div>
         </div>
         <div class="actions flex-row gap-2">
@@ -709,6 +790,58 @@ const exportHtml = () => {
   gap: 0.5rem;
   color: var(--text-secondary);
   font-size: 0.95rem;
+}
+
+.new-topic-btn {
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--accent-color);
+  padding: 0.35rem 0.65rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.new-topic-btn:hover {
+  border-color: var(--accent-color);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.new-topic-inline {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.new-topic-input {
+  flex: 1;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--surface-color);
+  color: var(--text-color);
+}
+
+.new-topic-parent-select {
+  min-width: 180px;
+  font-size: 0.95rem;
+  border: 1px solid var(--border-color);
+  background: var(--surface-color);
+  color: var(--text-color);
+  padding: 0.4rem 0.6rem;
+  border-radius: 4px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.new-topic-parent-select:hover {
+  border-color: var(--accent-color);
+}
+
+.new-topic-parent-select:focus {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
 }
 
 .topic-select {

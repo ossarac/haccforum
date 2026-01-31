@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Topic } from '../stores/topicStore'
-import { ChevronDown, ChevronRight, Edit2, Trash2, Plus } from 'lucide-vue-next'
+import { ChevronDown, ChevronRight, Edit2, Trash2, Plus, Merge } from 'lucide-vue-next'
 
 interface Props {
   topic: Topic
   expandedTopics: Set<string>
   currentUserId?: string
   isAdmin?: boolean
+  selectedId?: string | null
 }
 
 interface Emits {
@@ -15,6 +16,8 @@ interface Emits {
   edit: [topic: Topic]
   delete: [topic: Topic]
   'create-child': [topic: Topic]
+  select: [topic: Topic]
+  merge: [topic: Topic]
 }
 
 const props = defineProps<Props>()
@@ -40,11 +43,20 @@ const handleDelete = () => {
 const handleCreateChild = () => {
   emit('create-child', props.topic)
 }
+
+const handleSelect = () => {
+  emit('select', props.topic)
+}
+
+const handleMerge = (event: Event) => {
+  event.stopPropagation()
+  emit('merge', props.topic)
+}
 </script>
 
 <template>
   <div class="topic-node">
-    <div class="topic-row">
+    <div class="topic-row" @click="handleSelect" :class="{ selected: selectedId === topic.id }">
       <button
         v-if="children.length > 0"
         class="expand-btn"
@@ -66,6 +78,15 @@ const handleCreateChild = () => {
       </div>
 
       <div class="topic-actions">
+        <button
+          v-if="isAdmin"
+          class="action-btn merge-btn"
+          @click="handleMerge"
+          title="Merge into another topic"
+          aria-label="Merge topic"
+        >
+          <Merge :size="16" />
+        </button>
         <button
           class="action-btn"
           @click="handleCreateChild"
@@ -107,6 +128,7 @@ const handleCreateChild = () => {
         @edit="emit('edit', $event)"
         @delete="emit('delete', $event)"
         @create-child="emit('create-child', $event)"
+        @merge="emit('merge', $event)"
       />
     </div>
   </div>
@@ -131,6 +153,10 @@ const handleCreateChild = () => {
 
 .topic-row:hover {
   background: rgba(59, 130, 246, 0.05);
+}
+
+.topic-row.selected {
+  background: rgba(59, 130, 246, 0.12);
 }
 
 .expand-btn {
@@ -214,6 +240,12 @@ const handleCreateChild = () => {
   border-color: #dc2626;
   color: #dc2626;
   background: rgba(220, 38, 38, 0.05);
+}
+
+.merge-btn:hover {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+  background: rgba(59, 130, 246, 0.08);
 }
 
 .children {

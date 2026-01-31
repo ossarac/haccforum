@@ -2,12 +2,14 @@ import type { NextFunction, Request, Response } from 'express'
 import jwt from 'jsonwebtoken'
 import env from '../config/env.js'
 import type { AuthUser } from '../types/auth.js'
+import { getSetting, SETTINGS_KEYS } from '../models/Settings.js'
 
 interface TokenPayload {
   id: string
   email: string
   name: string
   roles: string[]
+  status: string
   language?: string
   emailVerified?: boolean
   readingPreferences?: any
@@ -35,6 +37,7 @@ export function authenticate(req: Request, res: Response, next: NextFunction): v
       email: decoded.email,
       name: decoded.name,
       roles: decoded.roles,
+      status: decoded.status as 'pending' | 'approved' | 'rejected',
       language: decoded.language,
       emailVerified: decoded.emailVerified,
       readingPreferences: decoded.readingPreferences
@@ -68,6 +71,7 @@ export function optionalAuthenticate(req: Request, res: Response, next: NextFunc
       email: decoded.email,
       name: decoded.name,
       roles: decoded.roles,
+      status: decoded.status as 'pending' | 'approved' | 'rejected',
       language: decoded.language,
       emailVerified: decoded.emailVerified,
       readingPreferences: decoded.readingPreferences
@@ -80,10 +84,16 @@ export function optionalAuthenticate(req: Request, res: Response, next: NextFunc
   }
 }
 
-export function requireAnyRole(...allowed: Array<'admin' | 'editor' | 'viewer'>) {
+export function requireAnyRole(...allowed: Array<'admin' | 'writer' | 'viewer'>) {
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!req.user) {
       unauthorized(res)
+      return
+    }
+
+    // Must be approved to access role-protected routes
+    if (req.user.status !== 'approved') {
+      res.status(403).json({ message: 'Account not approved' })
       return
     }
 
@@ -93,6 +103,60 @@ export function requireAnyRole(...allowed: Array<'admin' | 'editor' | 'viewer'>)
       return
     }
 
+    next()
+  }
+}
+
+// Middleware to require approved status
+export function requireApproved(req: Request, res: Response, next: NextFunction): void {
+  if (!req.user) {
+    unauthorized(res)
+    return
+  }
+
+  if (req.user.status !== 'approved') {
+    res.status(403).json({ 
+      message: 'Account not approved',
+      code: 'NOT_APPROVED'
+    })
+    return
+  }
+
+  next()
+}
+
+// Middleware to check guest access for reading content
+export async function requireAuthIfGuestDisabled(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const guestAccessEnabled = await getSetting(SETTINGS_KEYS.GUEST_ACCESS_ENABLED, true)
+    
+    if (guestAccessEnabled) {
+      // Guest access is enabled, anyone can proceed
+      next()
+      return
+    }
+
+    // Guest access is disabled, require authenticated and approved user
+    if (!req.user) {
+      res.status(401).json({ 
+        message: 'Authentication required',
+        code: 'GUEST_ACCESS_DISABLED'
+      })
+      return
+    }
+
+    if (req.user.status !== 'approved') {
+      res.status(403).json({ 
+        message: 'Account not approved',
+        code: 'NOT_APPROVED'
+      })
+      return
+    }
+
+    next()
+  } catch (error) {
+    console.error('[auth] requireAuthIfGuestDisabled error', error)
+    // Fail open - allow access if settings can't be read
     next()
   }
 }

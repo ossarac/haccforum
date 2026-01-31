@@ -48,6 +48,7 @@ export const en = {
   // Topic errors
   invalidTopicID: 'Invalid topic ID',
   onlyAdminsAndEditorsCanCreate: 'Only admins and editors can create topics',
+  onlyAdminsAndWritersCanCreate: 'Only admins and writers can create topics',
   topicNameRequired: 'Topic name is required',
   invalidParentTopicID: 'Invalid parent topic ID',
   parentTopicNotFound: 'Parent topic not found',
@@ -64,6 +65,14 @@ export const en = {
   failedToDeleteTopic: 'Failed to delete topic',
   failedToGetTopic: 'Failed to get topic',
   failedToGetTopicPath: 'Failed to get topic path',
+  onlyAdminsCanMerge: 'Only admins can merge topics',
+  mergeSourceTargetRequired: 'sourceId and targetId are required',
+  mergeMustDiffer: 'Source and target topics must be different',
+  targetTopicNotFound: 'Target topic not found',
+  mergeCycleNotAllowed: 'Cannot merge into a descendant of the source topic',
+  mergeDryRun: 'Merge dry-run completed',
+  mergeCompleted: 'Topics merged successfully',
+  failedToMergeTopics: 'Failed to merge topics',
   
   // Auth errors
   emailNamePasswordRequired: 'email, name and password are required',
@@ -72,6 +81,8 @@ export const en = {
   userAlreadyExists: 'User already exists',
   emailAndPasswordRequired: 'email and password are required',
   invalidCredentials: 'Invalid credentials',
+  accountPendingApproval: 'Your account is pending approval. Please wait for an administrator to review your request.',
+  accountRejected: 'Your account application has been rejected.',
   verificationTokenRequired: 'Verification token is required',
   invalidOrExpiredToken: 'Invalid or expired verification token',
   userNotFound: 'User not found',
@@ -79,5 +90,17 @@ export const en = {
   emailIsRequired: 'Email is required',
   emailAlreadyVerified: 'Email is already verified',
   verificationEmailSent: 'Verification email sent',
-  invalidLanguage: 'Invalid language. Must be "tr" or "en"'
+  invalidLanguage: 'Invalid language. Must be "tr" or "en"',
+  
+  // Admin - User management
+  userAlreadyApproved: 'User is already approved',
+  userAlreadyRejected: 'User is already rejected',
+  userApproved: 'User approved successfully',
+  userRejected: 'User rejected successfully',
+  rolesRequired: 'Roles are required',
+  cannotDemoteSelf: 'Cannot demote yourself',
+  userRoleUpdated: 'User role updated successfully',
+  cannotDeleteSelf: 'Cannot delete yourself',
+  cannotDeleteAdmin: 'Cannot delete another admin',
+  userDeleted: 'User deleted successfully'
 } as const

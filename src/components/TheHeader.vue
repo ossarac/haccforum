@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, RouterLink } from 'vue-router'
 import { storeToRefs } from 'pinia'
-import { Moon, Sun, PenTool, LogOut, FileText, Settings, Languages, Menu, X } from 'lucide-vue-next'
+import { Moon, Sun, PenTool, LogOut, FileText, Settings, Languages, Menu, X, ChevronDown, Users, BookOpen, FolderTree } from 'lucide-vue-next'
 import { useAuthStore } from '../stores/authStore'
 import { useI18n } from 'vue-i18n'
 import { setLanguage } from '../i18n'
@@ -17,7 +17,20 @@ const mobileMenuOpen = ref(false)
 
 const userName = computed(() => user.value?.name || user.value?.email || 'User')
 const isAdmin = computed(() => auth.hasRole('admin'))
-const isEditor = computed(() => auth.hasRole('editor'))
+const isWriter = computed(() => auth.hasRole('writer'))
+const canWrite = computed(() => auth.canWrite)
+const adminDropdownOpen = ref(false)
+const mobileAdminExpanded = ref(false)
+
+const showAdminMenu = computed(() => isAuthenticated.value && isAdmin.value)
+
+const closeAdminDropdown = () => {
+  adminDropdownOpen.value = false
+}
+
+const toggleAdminDropdown = () => {
+  adminDropdownOpen.value = !adminDropdownOpen.value
+}
 
 const toggleTheme = () => {
   isDark.value = !isDark.value
@@ -77,24 +90,52 @@ onMounted(() => {
           <span class="desktop-only">{{ t('nav.home') }}</span>
         </RouterLink>
 
-        <RouterLink to="/editor" class="icon-btn" :title="t('nav.write')">
+        <RouterLink v-if="canWrite" to="/editor" class="icon-btn" :title="t('nav.write')">
           <PenTool :size="20" />
           <span class="desktop-only">{{ t('nav.write') }}</span>
         </RouterLink>
 
-        <RouterLink v-if="isAuthenticated" to="/drafts" class="icon-btn" :title="t('nav.drafts')">
+        <RouterLink v-if="isAuthenticated && canWrite" to="/drafts" class="icon-btn" :title="t('nav.drafts')">
           <FileText :size="20" />
           <span class="desktop-only">{{ t('nav.drafts') }}</span>
         </RouterLink>
 
-        <RouterLink v-if="isAuthenticated && isAdmin" to="/admin/articles" class="icon-btn admin-btn" :title="t('nav.admin') + ' - ' + t('nav.articles')">
-          <Settings :size="20" />
-          <span class="desktop-only">{{ t('nav.articles') }}</span>
-        </RouterLink>
-        <RouterLink v-if="isAuthenticated && (isAdmin || isEditor)" to="/admin/topics" class="icon-btn admin-btn" :title="t('nav.manageTopics')">
-          <Settings :size="20" />
-          <span class="desktop-only">{{ t('nav.topics') }}</span>
-        </RouterLink>
+        <!-- Admin Dropdown -->
+        <div v-if="showAdminMenu" class="admin-dropdown-container" @mouseleave="closeAdminDropdown">
+          <button 
+            class="icon-btn admin-btn" 
+            @click="toggleAdminDropdown"
+            @mouseenter="adminDropdownOpen = true"
+            :title="t('nav.admin')"
+          >
+            <Settings :size="20" />
+            <span class="desktop-only">{{ t('nav.admin') }}</span>
+            <ChevronDown :size="16" class="chevron" :class="{ rotated: adminDropdownOpen }" />
+          </button>
+          <transition name="dropdown">
+            <div v-if="adminDropdownOpen" class="admin-dropdown">
+              <div class="admin-dropdown-menu">
+                <RouterLink v-if="isAdmin" to="/admin/users" class="dropdown-item" @click="closeAdminDropdown">
+                  <Users :size="18" />
+                  <span>Users</span>
+                </RouterLink>
+                <RouterLink v-if="isAdmin" to="/admin/articles" class="dropdown-item" @click="closeAdminDropdown">
+                  <BookOpen :size="18" />
+                  <span>{{ t('nav.articles') }}</span>
+                </RouterLink>
+                <RouterLink to="/admin/topics" class="dropdown-item" @click="closeAdminDropdown">
+                  <FolderTree :size="18" />
+                  <span>{{ t('nav.topics') }}</span>
+                </RouterLink>
+                <RouterLink v-if="isAdmin" to="/admin/settings" class="dropdown-item" @click="closeAdminDropdown">
+                  <Settings :size="18" />
+                  <span>Settings</span>
+                </RouterLink>
+              </div>
+            </div>
+          </transition>
+        </div>
+
 
         <button @click="toggleLanguage" class="icon-btn language-btn" :title="t('language.select')">
           <Languages :size="20" />
@@ -134,25 +175,44 @@ onMounted(() => {
           <span>{{ t('nav.home') }}</span>
         </RouterLink>
         
-        <RouterLink to="/editor" class="mobile-nav-item" @click="closeMobileMenu">
+        <RouterLink v-if="canWrite" to="/editor" class="mobile-nav-item" @click="closeMobileMenu">
           <PenTool :size="20" />
           <span>{{ t('nav.write') }}</span>
         </RouterLink>
 
-        <RouterLink v-if="isAuthenticated" to="/drafts" class="mobile-nav-item" @click="closeMobileMenu">
+        <RouterLink v-if="isAuthenticated && canWrite" to="/drafts" class="mobile-nav-item" @click="closeMobileMenu">
           <FileText :size="20" />
           <span>{{ t('nav.drafts') }}</span>
         </RouterLink>
 
-        <RouterLink v-if="isAuthenticated && isAdmin" to="/admin/articles" class="mobile-nav-item admin-item" @click="closeMobileMenu">
-          <Settings :size="20" />
-          <span>{{ t('nav.articles') }}</span>
-        </RouterLink>
-
-        <RouterLink v-if="isAuthenticated && (isAdmin || isEditor)" to="/admin/topics" class="mobile-nav-item admin-item" @click="closeMobileMenu">
-          <Settings :size="20" />
-          <span>{{ t('nav.topics') }}</span>
-        </RouterLink>
+        <!-- Mobile Admin Section -->
+        <template v-if="showAdminMenu">
+          <button class="mobile-nav-item admin-item" @click="mobileAdminExpanded = !mobileAdminExpanded">
+            <Settings :size="20" />
+            <span>{{ t('nav.admin') }}</span>
+            <ChevronDown :size="18" class="mobile-chevron" :class="{ rotated: mobileAdminExpanded }" />
+          </button>
+          <transition name="expand">
+            <div v-if="mobileAdminExpanded" class="mobile-admin-submenu">
+              <RouterLink v-if="isAdmin" to="/admin/users" class="mobile-nav-item submenu-item" @click="closeMobileMenu">
+                <Users :size="18" />
+                <span>Users</span>
+              </RouterLink>
+              <RouterLink v-if="isAdmin" to="/admin/articles" class="mobile-nav-item submenu-item" @click="closeMobileMenu">
+                <BookOpen :size="18" />
+                <span>{{ t('nav.articles') }}</span>
+              </RouterLink>
+              <RouterLink to="/admin/topics" class="mobile-nav-item submenu-item" @click="closeMobileMenu">
+                <FolderTree :size="18" />
+                <span>{{ t('nav.topics') }}</span>
+              </RouterLink>
+              <RouterLink v-if="isAdmin" to="/admin/settings" class="mobile-nav-item submenu-item" @click="closeMobileMenu">
+                <Settings :size="18" />
+                <span>Settings</span>
+              </RouterLink>
+            </div>
+          </transition>
+        </template>
         
         <div class="mobile-nav-divider"></div>
         
@@ -277,6 +337,78 @@ button.icon-btn:hover {
   background: rgba(125, 125, 125, 0.12);
 }
 
+/* Admin Dropdown Styles */
+.admin-dropdown-container {
+  position: relative;
+}
+
+.admin-btn .chevron {
+  transition: transform 0.2s ease;
+  margin-left: 2px;
+}
+
+.admin-btn .chevron.rotated {
+  transform: rotate(180deg);
+}
+
+.admin-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  padding-top: 0.5rem;
+  min-width: 180px;
+  z-index: 100;
+}
+
+.admin-dropdown::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 0.5rem;
+}
+
+.admin-dropdown-menu {
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  color: var(--text-color);
+  text-decoration: none;
+  font-size: 0.9rem;
+  transition: all 0.15s;
+}
+
+.dropdown-item:hover {
+  background: rgba(125, 125, 125, 0.08);
+  color: var(--accent-color);
+}
+
+.dropdown-item.router-link-active {
+  background: rgba(125, 125, 125, 0.05);
+  color: var(--accent-color);
+}
+
+.dropdown-enter-active,
+.dropdown-leave-active {
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.dropdown-enter-from,
+.dropdown-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
 .language-btn {
   font-weight: 600;
 }
@@ -365,6 +497,38 @@ button.icon-btn:hover {
 
   .mobile-nav-item.admin-item {
     color: var(--accent-color);
+  }
+
+  .mobile-nav-item .mobile-chevron {
+    margin-left: auto;
+    transition: transform 0.2s ease;
+  }
+
+  .mobile-nav-item .mobile-chevron.rotated {
+    transform: rotate(180deg);
+  }
+
+  .mobile-admin-submenu {
+    background: rgba(125, 125, 125, 0.03);
+    overflow: hidden;
+  }
+
+  .mobile-nav-item.submenu-item {
+    padding-left: 2.5rem;
+    color: var(--accent-color);
+    font-size: 0.95rem;
+  }
+
+  .expand-enter-active,
+  .expand-leave-active {
+    transition: all 0.2s ease;
+    max-height: 300px;
+  }
+
+  .expand-enter-from,
+  .expand-leave-to {
+    max-height: 0;
+    opacity: 0;
   }
 
   .mobile-nav-item.primary-item {

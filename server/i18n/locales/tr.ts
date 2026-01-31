@@ -48,6 +48,7 @@ export const tr = {
   // Topic errors
   invalidTopicID: 'Geçersiz konu kimliği',
   onlyAdminsAndEditorsCanCreate: 'Yalnızca yöneticiler ve editörler konu oluşturabilir',
+  onlyAdminsAndWritersCanCreate: 'Yalnızca yöneticiler ve yazarlar konu oluşturabilir',
   topicNameRequired: 'Konu adı gereklidir',
   invalidParentTopicID: 'Geçersiz üst konu kimliği',
   parentTopicNotFound: 'Üst konu bulunamadı',
@@ -64,6 +65,14 @@ export const tr = {
   failedToDeleteTopic: 'Konu silinemedi',
   failedToGetTopic: 'Konu alınamadı',
   failedToGetTopicPath: 'Konu yolu alınamadı',
+  onlyAdminsCanMerge: 'Yalnızca yöneticiler konuları birleştirebilir',
+  mergeSourceTargetRequired: 'sourceId ve targetId gereklidir',
+  mergeMustDiffer: 'Kaynak ve hedef konular farklı olmalıdır',
+  targetTopicNotFound: 'Hedef konu bulunamadı',
+  mergeCycleNotAllowed: 'Kaynak konunun altına birleştirilemez',
+  mergeDryRun: 'Birleştirme önizlemesi tamamlandı',
+  mergeCompleted: 'Konular başarıyla birleştirildi',
+  failedToMergeTopics: 'Konular birleştirilemedi',
   
   // Auth errors
   emailNamePasswordRequired: 'e-posta, isim ve şifre gereklidir',
@@ -72,6 +81,8 @@ export const tr = {
   userAlreadyExists: 'Kullanıcı zaten mevcut',
   emailAndPasswordRequired: 'e-posta ve şifre gereklidir',
   invalidCredentials: 'Geçersiz kimlik bilgileri',
+  accountPendingApproval: 'Hesabınız onay bekliyor. Lütfen bir yöneticinin başvurunuzu incelemesini bekleyin.',
+  accountRejected: 'Hesap başvurunuz reddedildi.',
   verificationTokenRequired: 'Doğrulama tokeni gereklidir',
   invalidOrExpiredToken: 'Geçersiz veya süresi dolmuş doğrulama tokeni',
   userNotFound: 'Kullanıcı bulunamadı',
@@ -79,5 +90,17 @@ export const tr = {
   emailIsRequired: 'E-posta gereklidir',
   emailAlreadyVerified: 'E-posta zaten doğrulanmış',
   verificationEmailSent: 'Doğrulama e-postası gönderildi',
-  invalidLanguage: 'Geçersiz dil. "tr" veya "en" olmalıdır'
+  invalidLanguage: 'Geçersiz dil. "tr" veya "en" olmalıdır',
+  
+  // Admin - User management
+  userAlreadyApproved: 'Kullanıcı zaten onaylanmış',
+  userAlreadyRejected: 'Kullanıcı zaten reddedilmiş',
+  userApproved: 'Kullanıcı başarıyla onaylandı',
+  userRejected: 'Kullanıcı başarıyla reddedildi',
+  rolesRequired: 'Roller gereklidir',
+  cannotDemoteSelf: 'Kendinizi düşüremezsiniz',
+  userRoleUpdated: 'Kullanıcı rolü başarıyla güncellendi',
+  cannotDeleteSelf: 'Kendinizi silemezsiniz',
+  cannotDeleteAdmin: 'Başka bir yöneticiyi silemezsiniz',
+  userDeleted: 'Kullanıcı başarıyla silindi'
 } as const

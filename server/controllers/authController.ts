@@ -1,22 +1,21 @@
 import type { Request, Response } from 'express'
 import bcrypt from 'bcryptjs'
-import UserModel from '../models/User.js'
+import UserModel, { type UserRole, type UserStatus } from '../models/User.js'
 import { issueToken, serializeUser } from '../utils/auth.js'
 import { generateVerificationToken, sendVerificationEmail, verifyToken } from '../utils/verification.js'
 import { t } from '../i18n/index.js'
 
-const allowedRoles = new Set(['admin', 'editor', 'viewer'])
+const allowedRoles = new Set<UserRole>(['admin', 'writer', 'viewer'])
 
-function sanitizeRoles(input: unknown): string[] {
-  if (!Array.isArray(input)) {
-    return ['editor']
+function sanitizeRole(input: unknown): UserRole {
+  if (typeof input === 'string' && allowedRoles.has(input as UserRole)) {
+    return input as UserRole
   }
-  const filtered = input.filter((role): role is 'admin' | 'editor' | 'viewer' => allowedRoles.has(role))
-  return filtered.length ? Array.from(new Set(filtered)) : ['editor']
+  return 'viewer'
 }
 
 export async function register(req: Request, res: Response): Promise<void> {
-  const { email, name, password, roles } = req.body ?? {}
+  const { email, name, password, requestedRole, applicationNote } = req.body ?? {}
   if (!email || !name || !password) {
     res.status(400).json({ message: t('emailNamePasswordRequired', req) })
     return
@@ -40,28 +39,21 @@ export async function register(req: Request, res: Response): Promise<void> {
   }
 
   const userCount = await UserModel.estimatedDocumentCount()
-  let assignedRoles = sanitizeRoles(roles)
+  
+  let assignedRoles: UserRole[] = ['viewer']
+  let status: UserStatus = 'pending'
+  const sanitizedRequestedRole = sanitizeRole(requestedRole)
 
-  // First user becomes admin automatically
+  // First user becomes admin automatically and is auto-approved
   if (userCount === 0) {
-    if (!assignedRoles.includes('admin')) {
-      assignedRoles.push('admin')
-    }
-  } else {
-    // For subsequent users:
-    // - If requester is authenticated admin, they can assign any roles
-    // - If public signup (no auth), user gets 'editor' role only
-    if (req.user?.roles.includes('admin')) {
-      // Admin can invite with custom roles
-      assignedRoles = assignedRoles.filter(role => role !== 'admin')
-      if (!assignedRoles.length) {
-        assignedRoles.push('editor')
-      }
-    } else {
-      // Public signup: always gets 'editor' role
-      assignedRoles = ['editor']
-    }
+    assignedRoles = ['admin', 'writer', 'viewer']
+    status = 'approved'
+  } else if (req.user?.roles.includes('admin')) {
+    // Admin creating a user - auto-approve with requested role
+    assignedRoles = sanitizedRequestedRole === 'writer' ? ['writer', 'viewer'] : ['viewer']
+    status = 'approved'
   }
+  // For public signup, user starts as pending viewer
 
   const passwordHash = await bcrypt.hash(password, 12)
   const user = await UserModel.create({
@@ -69,6 +61,9 @@ export async function register(req: Request, res: Response): Promise<void> {
     name,
     passwordHash,
     roles: assignedRoles,
+    status,
+    requestedRole: sanitizedRequestedRole !== 'viewer' ? sanitizedRequestedRole : undefined,
+    applicationNote: sanitizedRequestedRole === 'writer' && applicationNote ? applicationNote.slice(0, 2000) : undefined,
     emailVerified: false
   })
 
@@ -95,6 +90,24 @@ export async function login(req: Request, res: Response): Promise<void> {
   const valid = await user.comparePassword(password)
   if (!valid) {
     res.status(401).json({ message: t('invalidCredentials', req) })
+    return
+  }
+
+  // Check if user account is approved
+  if (user.status === 'pending') {
+    res.status(403).json({ 
+      message: t('accountPendingApproval', req),
+      code: 'PENDING_APPROVAL'
+    })
+    return
+  }
+
+  if (user.status === 'rejected') {
+    res.status(403).json({ 
+      message: t('accountRejected', req),
+      code: 'ACCOUNT_REJECTED',
+      adminNote: user.adminNote
+    })
     return
   }
 

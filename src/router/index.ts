@@ -6,6 +6,8 @@ import DraftsView from '../views/DraftsView.vue'
 import TopicView from '../views/TopicView.vue'
 import AdminArticlesView from '../views/AdminArticlesView.vue'
 import AdminTopicsView from '../views/AdminTopicsView.vue'
+import AdminUsersView from '../views/AdminUsersView.vue'
+import AdminSettingsView from '../views/AdminSettingsView.vue'
 import LoginView from '../views/LoginView.vue'
 import SignupView from '../views/SignupView.vue'
 import VerifyEmailView from '../views/VerifyEmailView.vue'
@@ -28,7 +30,7 @@ const router = createRouter({
       path: '/drafts',
       name: 'drafts',
       component: DraftsView,
-      meta: { requiresAuth: true }
+      meta: { requiresAuth: true, requiresApproved: true }
     },
     {
       path: '/admin/articles',
@@ -40,13 +42,25 @@ const router = createRouter({
       path: '/admin/topics',
       name: 'admin-topics',
       component: AdminTopicsView,
-      meta: { requiresAuth: true, requiresEditor: true }
+      meta: { requiresAuth: true, requiresWriter: true }
+    },
+    {
+      path: '/admin/users',
+      name: 'admin-users',
+      component: AdminUsersView,
+      meta: { requiresAuth: true, requiresAdmin: true }
+    },
+    {
+      path: '/admin/settings',
+      name: 'admin-settings',
+      component: AdminSettingsView,
+      meta: { requiresAuth: true, requiresAdmin: true }
     },
     {
       path: '/editor/:id?',
       name: 'editor',
       component: EditorView,
-      meta: { requiresAuth: true }
+      meta: { requiresAuth: true, requiresWriter: true }
     },
     {
       path: '/article/:id',
@@ -84,11 +98,16 @@ router.beforeEach(async to => {
     }
   }
 
+  // Check if user is approved for routes that require it
+  if (to.meta.requiresApproved && !auth.isApproved) {
+    return { name: 'home' }
+  }
+
   if (to.meta.requiresAdmin && !auth.hasRole('admin')) {
     return { name: 'home' }
   }
 
-  if (to.meta.requiresEditor && !auth.hasRole('editor') && !auth.hasRole('admin')) {
+  if (to.meta.requiresWriter && !auth.hasRole('writer') && !auth.hasRole('admin')) {
     return { name: 'home' }
   }
 
