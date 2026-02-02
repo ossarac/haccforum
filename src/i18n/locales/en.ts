@@ -224,7 +224,27 @@ export default {
     noTopicsYet: 'No topics with articles yet. Be the first to contribute!',
     recent: 'Recent:',
     viewAllArticles: 'View all articles',
-    reply: 'Reply'
+    reply: 'Reply',
+    adminNews: {
+      title: 'Admin News',
+      subtitle: 'Latest requests and activity overview',
+      pendingRequests: 'Pending signup requests',
+      pendingRequestsNone: 'No pending requests',
+      oldestRequest: 'Oldest request',
+      viewRequests: 'Review requests',
+      totalTopics: 'Total topics',
+      totalTopicsCaption: 'Active topics in the forum',
+      totalArticles: 'Total articles',
+      totalArticlesCaption: 'Published articles and replies',
+      recentReplies: 'Recent replies',
+      recentRepliesCaption: 'Replies in the latest activity feed',
+      latestActivity: 'Latest activity',
+      latestArticle: 'Latest article',
+      latestReply: 'Latest reply',
+      latestTopic: 'Latest topic activity',
+      updated: 'Updated {time}',
+      noRecentActivity: 'No recent activity yet'
+    }
   },
   login: {
     welcomeBack: 'Welcome Back',

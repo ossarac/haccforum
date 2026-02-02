@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { onMounted, computed, ref } from 'vue'
+import { onMounted, computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useArticleStore, type Article } from '../stores/articleStore'
 import { useTopicStore } from '../stores/topicStore'
 import { useAuthStore } from '../stores/authStore'
-import { Plus, ChevronRight, Clock, MessageSquare, TrendingUp, CornerDownRight } from 'lucide-vue-next'
+import { apiRequest } from '../api/client'
+import { Plus, ChevronRight, Clock, MessageSquare, TrendingUp, CornerDownRight, Bell, Users, FileText, Layers } from 'lucide-vue-next'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -23,17 +24,37 @@ const topicStats = ref<Array<{
 }>>([])
 const isLoading = ref(true)
 const canEdit = computed(() => authStore.isAuthenticated)
+const isAdmin = computed(() => authStore.hasRole('admin'))
+
+interface PendingUser {
+  id: string
+  name: string
+  email: string
+  requestedRole?: string
+  createdAt: string
+}
+
+const pendingUsers = ref<PendingUser[]>([])
+const adminNewsLoading = ref(false)
+const adminNewsError = ref('')
 
 onMounted(async () => {
   try {
     await Promise.all([
       topicStore.fetchTopics(),
-      loadDashboardData()
+      loadDashboardData(),
+      isAdmin.value ? loadAdminNews() : Promise.resolve()
     ])
   } catch (error) {
     console.error('[home] failed to load dashboard', error)
   } finally {
     isLoading.value = false
+  }
+})
+
+watch(isAdmin, async value => {
+  if (value && pendingUsers.value.length === 0 && !adminNewsLoading.value) {
+    await loadAdminNews()
   }
 })
 
@@ -44,6 +65,19 @@ const loadDashboardData = async () => {
   ])
   recentArticles.value = recent
   topicStats.value = stats
+}
+
+const loadAdminNews = async () => {
+  if (!isAdmin.value) return
+  adminNewsLoading.value = true
+  adminNewsError.value = ''
+  try {
+    pendingUsers.value = await apiRequest<PendingUser[]>('/admin/users/pending')
+  } catch (error: any) {
+    adminNewsError.value = error?.message || t('common.error')
+  } finally {
+    adminNewsLoading.value = false
+  }
 }
 
 const getTopicById = (id: string | null) => {
@@ -67,6 +101,15 @@ const getTopicWithStats = computed(() => {
     })
 })
 
+const pendingRequestCount = computed(() => pendingUsers.value.length)
+const oldestPendingUser = computed(() => pendingUsers.value[0])
+const totalTopicsCount = computed(() => topicStore.topics.length)
+const totalArticlesCount = computed(() => topicStats.value.reduce((sum, stat) => sum + stat.totalArticles, 0))
+const recentRepliesCount = computed(() => recentArticles.value.filter(article => article.parentId).length)
+const latestArticle = computed(() => recentArticles.value.find(article => !article.parentId) ?? recentArticles.value[0])
+const latestReply = computed(() => recentArticles.value.find(article => article.parentId))
+const latestTopicActivity = computed(() => getTopicWithStats.value[0])
+
 const viewArticle = (id: string) => {
   router.push(`/article/${id}`)
 }
@@ -81,6 +124,10 @@ const createArticle = () => {
     return
   }
   router.push('/editor')
+}
+
+const goToAdminUsers = () => {
+  router.push('/admin/users')
 }
 
 const formatTimeAgo = (iso: string) => {
@@ -129,6 +176,105 @@ const getTopicColor = (topicId: string) => {
         <span>{{ t('home.signInToContribute') }}</span>
       </button>
     </div>
+
+    <section v-if="isAdmin" class="admin-news">
+      <div class="admin-news-header">
+        <div>
+          <div class="admin-news-title-row">
+            <Bell :size="18" />
+            <h2 class="admin-news-title">{{ t('home.adminNews.title') }}</h2>
+          </div>
+          <p class="admin-news-subtitle">{{ t('home.adminNews.subtitle') }}</p>
+        </div>
+        <button class="admin-news-action" @click="goToAdminUsers">
+          <span>{{ t('home.adminNews.viewRequests') }}</span>
+          <ChevronRight :size="16" />
+        </button>
+      </div>
+
+      <div v-if="adminNewsLoading" class="admin-news-loading">
+        <div class="loading-spinner small"></div>
+        <span>{{ t('common.loading') }}</span>
+      </div>
+
+      <div v-else-if="adminNewsError" class="admin-news-error">
+        {{ adminNewsError }}
+      </div>
+
+      <div v-else class="admin-news-grid">
+        <div class="news-card pending" :class="{ 'has-pending': pendingRequestCount > 0 }">
+          <div class="news-card-header">
+            <Users :size="18" />
+            <span>{{ t('home.adminNews.pendingRequests') }}</span>
+          </div>
+          <div class="news-card-value">{{ pendingRequestCount }}</div>
+          <p class="news-card-sub" v-if="pendingRequestCount > 0">
+            {{ t('home.adminNews.oldestRequest') }}: {{ oldestPendingUser?.name }}
+          </p>
+          <p class="news-card-sub" v-else>
+            {{ t('home.adminNews.pendingRequestsNone') }}
+          </p>
+        </div>
+
+        <div class="news-card">
+          <div class="news-card-header">
+            <Layers :size="18" />
+            <span>{{ t('home.adminNews.totalTopics') }}</span>
+          </div>
+          <div class="news-card-value">{{ totalTopicsCount }}</div>
+          <p class="news-card-sub">{{ t('home.adminNews.totalTopicsCaption') }}</p>
+        </div>
+
+        <div class="news-card">
+          <div class="news-card-header">
+            <FileText :size="18" />
+            <span>{{ t('home.adminNews.totalArticles') }}</span>
+          </div>
+          <div class="news-card-value">{{ totalArticlesCount }}</div>
+          <p class="news-card-sub">{{ t('home.adminNews.totalArticlesCaption') }}</p>
+        </div>
+
+        <div class="news-card">
+          <div class="news-card-header">
+            <MessageSquare :size="18" />
+            <span>{{ t('home.adminNews.recentReplies') }}</span>
+          </div>
+          <div class="news-card-value">{{ recentRepliesCount }}</div>
+          <p class="news-card-sub">{{ t('home.adminNews.recentRepliesCaption') }}</p>
+        </div>
+
+        <div class="news-card wide">
+          <div class="news-card-header">
+            <TrendingUp :size="18" />
+            <span>{{ t('home.adminNews.latestActivity') }}</span>
+          </div>
+          <div class="news-list" v-if="latestArticle || latestReply || latestTopicActivity">
+            <div v-if="latestArticle" class="news-list-item">
+              <div class="news-item-label">{{ t('home.adminNews.latestArticle') }}</div>
+              <div class="news-item-title">{{ latestArticle.title }}</div>
+              <div class="news-item-time">
+                {{ t('home.adminNews.updated', { time: formatTimeAgo(latestArticle.publishedAt || latestArticle.createdAt) }) }}
+              </div>
+            </div>
+            <div v-if="latestReply" class="news-list-item">
+              <div class="news-item-label">{{ t('home.adminNews.latestReply') }}</div>
+              <div class="news-item-title">{{ latestReply.title }}</div>
+              <div class="news-item-time">
+                {{ t('home.adminNews.updated', { time: formatTimeAgo(latestReply.publishedAt || latestReply.createdAt) }) }}
+              </div>
+            </div>
+            <div v-if="latestTopicActivity" class="news-list-item">
+              <div class="news-item-label">{{ t('home.adminNews.latestTopic') }}</div>
+              <div class="news-item-title">{{ latestTopicActivity.topic?.name }}</div>
+              <div class="news-item-time">
+                {{ t('home.adminNews.updated', { time: formatTimeAgo(latestTopicActivity.stats.latestUpdate) }) }}
+              </div>
+            </div>
+          </div>
+          <p v-else class="news-card-sub">{{ t('home.adminNews.noRecentActivity') }}</p>
+        </div>
+      </div>
+    </section>
 
     <div v-if="isLoading" class="loading-section">
       <div class="loading-spinner"></div>
@@ -268,6 +414,142 @@ const getTopicColor = (topicId: string) => {
   gap: 2rem;
 }
 
+.admin-news {
+  margin-bottom: 3rem;
+  padding: 1.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.06), rgba(14, 165, 233, 0.04));
+}
+
+.admin-news-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.admin-news-title-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-color);
+}
+
+.admin-news-title {
+  font-size: 1.35rem;
+  margin: 0;
+  font-weight: 700;
+}
+
+.admin-news-subtitle {
+  margin: 0.35rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+.admin-news-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.55rem 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--surface-color);
+  color: var(--text-color);
+  cursor: pointer;
+  font-weight: 600;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.admin-news-action:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12);
+}
+
+.admin-news-loading,
+.admin-news-error {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.admin-news-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.news-card {
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-height: 120px;
+}
+
+.news-card.pending.has-pending {
+  border-color: rgba(239, 68, 68, 0.5);
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.15);
+}
+
+.news-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.news-card-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text-color);
+}
+
+.news-card-sub {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.news-card.wide {
+  grid-column: span 2;
+}
+
+.news-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.news-list-item {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.news-item-label {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.news-item-title {
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.news-item-time {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
 .header-content {
   flex: 1;
 }
@@ -336,6 +618,12 @@ const getTopicColor = (topicId: string) => {
   margin-bottom: 1rem;
 }
 
+.loading-spinner.small {
+  width: 20px;
+  height: 20px;
+  margin-bottom: 0;
+}
+
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
@@ -367,6 +655,31 @@ const getTopicColor = (topicId: string) => {
     opacity: 0.6;
     margin-top: -0.5rem;
     font-style: italic;
+  }
+}
+
+@media (max-width: 1100px) {
+  .admin-news-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .news-card.wide {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 720px) {
+  .admin-news-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .admin-news-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .news-card.wide {
+    grid-column: span 1;
   }
 }
 

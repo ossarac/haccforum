@@ -224,7 +224,27 @@ export default {
     noTopicsYet: 'Henüz makalesi olan konu yok. İlk siz katkıda bulunun!',
     recent: 'Son:',
     viewAllArticles: 'Tüm makaleleri görüntüle',
-    reply: 'Yanıt'
+    reply: 'Yanıt',
+    adminNews: {
+      title: 'Yönetici Haberleri',
+      subtitle: 'Son başvurular ve aktivite özeti',
+      pendingRequests: 'Bekleyen kayıt talepleri',
+      pendingRequestsNone: 'Bekleyen talep yok',
+      oldestRequest: 'En eski talep',
+      viewRequests: 'Talepleri incele',
+      totalTopics: 'Toplam konu',
+      totalTopicsCaption: 'Forumdaki aktif konular',
+      totalArticles: 'Toplam makale',
+      totalArticlesCaption: 'Yayınlanan makaleler ve yanıtlar',
+      recentReplies: 'Son yanıtlar',
+      recentRepliesCaption: 'Son aktivite akışındaki yanıtlar',
+      latestActivity: 'Son aktivite',
+      latestArticle: 'Son makale',
+      latestReply: 'Son yanıt',
+      latestTopic: 'Son konu aktivitesi',
+      updated: '{time} güncellendi',
+      noRecentActivity: 'Henüz aktivite yok'
+    }
   },
   login: {
     welcomeBack: 'Tekrar Hoş Geldiniz',
