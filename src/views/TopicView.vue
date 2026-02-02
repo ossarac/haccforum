@@ -5,7 +5,8 @@ import { useI18n } from 'vue-i18n'
 import { useArticleStore, type Article } from '../stores/articleStore'
 import { useTopicStore, type Topic } from '../stores/topicStore'
 import { useAuthStore } from '../stores/authStore'
-import { ChevronRight, FileText, Plus, FolderTree, Layers, Clock, User, CornerDownRight } from 'lucide-vue-next'
+import { ChevronRight, FileText, Plus, FolderTree, Layers, Clock, User, MessageSquare } from 'lucide-vue-next'
+import ThreadNode from '../components/ThreadNode.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -21,6 +22,8 @@ const breadcrumbPath = ref<Topic[]>([])
 const subtopics = ref<Topic[]>([])
 
 const topicId = computed(() => route.params.id as string)
+
+const sortBy = ref<'latest_article' | 'latest_reply'>('latest_article')
 
 const canEdit = computed(() => authStore.isAuthenticated)
 
@@ -41,6 +44,30 @@ const groupedArticles = computed(() => {
 
 const currentTopicArticles = computed(() => {
   return groupedArticles.value.get(topicId.value) || []
+})
+
+
+// Filter to show only top-level articles (no parents) in current topic  
+const topLevelArticles = computed(() => {
+  return currentTopicArticles.value.filter(article => !article.parentId)
+})
+
+const sortedTopLevelArticles = computed(() => {
+  const articles = [...topLevelArticles.value]
+  
+  if (sortBy.value === 'latest_article') {
+    return articles.sort((a, b) => {
+      const dateA = a.publishedAt || a.createdAt
+      const dateB = b.publishedAt || b.createdAt
+      return dateB.localeCompare(dateA)
+    })
+  } else {
+    return articles.sort((a, b) => {
+      const dateA = articleStore.getLatestActivityDate(a.id)
+      const dateB = articleStore.getLatestActivityDate(b.id)
+      return dateB.localeCompare(dateA)
+    })
+  }
 })
 
 const loadTopicData = async () => {
@@ -70,6 +97,10 @@ const loadTopicData = async () => {
       // Remove duplicates
       index === self.findIndex(a => a.id === article.id)
     )
+    
+    // Fetch threads recursively for all top-level articles in current topic
+    const topLevel = articles.value.filter(a => a.topicId === topicId.value && !a.parentId)
+    await Promise.all(topLevel.map(article => articleStore.fetchThreadRecursive(article.id, 5)))
   } catch (error) {
     console.error('[TopicView] Failed to load topic data:', error)
   } finally {
@@ -249,6 +280,30 @@ const getTopicColor = (topicId: string) => {
               : t('topic.allArticles') 
             }}
           </h2>
+          
+          <div class="sorting-controls" v-if="topLevelArticles.length > 1">
+            <span class="sort-label">{{ t('topic.sortBy') }}:</span>
+            <div class="sort-buttons">
+              <button 
+                class="sort-btn" 
+                :class="{ active: sortBy === 'latest_article' }"
+                @click="sortBy = 'latest_article'"
+                :title="t('topic.sortLatestArticle')"
+              >
+                <Clock :size="16" />
+                <span>{{ t('topic.sortLatestArticle') }}</span>
+              </button>
+              <button 
+                class="sort-btn" 
+                :class="{ active: sortBy === 'latest_reply' }"
+                @click="sortBy = 'latest_reply'"
+                :title="t('topic.sortLatestReply')"
+              >
+                <MessageSquare :size="16" />
+                <span>{{ t('topic.sortLatestReply') }}</span>
+              </button>
+            </div>
+          </div>
         </div>
 
         <div v-if="currentTopicArticles.length === 0 && subtopics.length === 0" class="empty-state">
@@ -261,37 +316,17 @@ const getTopicColor = (topicId: string) => {
           </button>
         </div>
 
-        <!-- Current Topic Articles -->
-        <div v-else-if="currentTopicArticles.length > 0" class="articles-list">
-          <article 
-            v-for="article in currentTopicArticles" 
+        <!-- Current Topic Articles (Threaded View) -->
+        <div v-else-if="sortedTopLevelArticles.length > 0" class="articles-list">
+          <ThreadNode
+            v-for="article in sortedTopLevelArticles"
             :key="article.id"
-            class="article-card"
-            :class="{ 'is-reply': article.parentId }"
-            @click="viewArticle(article.id)"
-          >
-            <div class="article-content">
-              <div class="article-title-row">
-                <span v-if="article.parentId" class="reply-badge">
-                  <CornerDownRight :size="14" />
-                  <span>{{ t('topic.reply') }}</span>
-                </span>
-                <h3 class="article-title">{{ article.title }}</h3>
-              </div>
-              <div class="article-meta">
-                <div class="meta-item">
-                  <User :size="14" />
-                  <span>{{ article.authorName || article.author.name }}</span>
-                </div>
-                <span class="meta-dot">·</span>
-                <div class="meta-item">
-                  <Clock :size="14" />
-                  <span>{{ formatTimeAgo(article.publishedAt || article.createdAt) }}</span>
-                </div>
-              </div>
-            </div>
-            <ChevronRight :size="20" class="article-arrow" />
-          </article>
+            :article="article"
+            :depth="0"
+            :max-depth="5"
+            :max-siblings="3"
+            @navigate="viewArticle($event)"
+          />
         </div>
 
         <!-- Articles Organized by Subtopic -->
@@ -517,6 +552,63 @@ const getTopicColor = (topicId: string) => {
   color: var(--text-color);
 }
 
+.sorting-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-left: auto;
+}
+
+.sort-label {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.sort-buttons {
+  display: flex;
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 2px;
+}
+
+.sort-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.sort-btn:hover {
+  color: var(--text-color);
+  background: var(--card-bg);
+}
+
+.sort-btn.active {
+  color: var(--text-color);
+  background: var(--card-bg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.sort-btn span {
+  display: none;
+}
+
+@media (min-width: 640px) {
+  .sort-btn span {
+    display: inline;
+  }
+}
+
 /* Subtopics Section */
 .subtopics-section {
   margin-bottom: 3rem;
@@ -602,7 +694,6 @@ const getTopicColor = (topicId: string) => {
 .articles-list {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
 }
 
 .articles-list.compact {

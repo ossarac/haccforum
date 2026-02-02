@@ -398,8 +398,9 @@ const handleDialogClose = () => {
       :title="dialogTitle"
       :message="dialogMessage"
       :type="dialogType"
+      :confirm-text="isCreating || isEditing ? t('common.save') : undefined"
       @close="handleDialogClose"
-      @confirm="handleDialogConfirm"
+      @confirm="isCreating || isEditing ? saveTopic() : handleDialogConfirm()"
     >
       <template v-if="isCreating || isEditing" #content>
         <div class="topic-form">
@@ -416,10 +417,6 @@ const handleDialogClose = () => {
             class="form-textarea"
             rows="3"
           />
-          <div class="dialog-actions">
-            <button class="btn btn-primary" @click="saveTopic()">{{ t('common.save') }}</button>
-            <button class="btn btn-secondary" @click="handleDialogClose">{{ t('common.cancel') }}</button>
-          </div>
         </div>
       </template>
     </Dialog>

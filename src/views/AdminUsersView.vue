@@ -369,6 +369,7 @@ const updateUserRole = async (user: User, grantWriter: boolean) => {
       :title="dialogTitle"
       :message="dialogMessage"
       :type="dialogType"
+      :confirm-text="pendingAction === approveUser ? t('admin.approve') : (pendingAction === rejectUser ? t('admin.reject') : undefined)"
       @confirm="handleDialogConfirm"
       @cancel="handleDialogCancel"
       @close="handleDialogCancel"

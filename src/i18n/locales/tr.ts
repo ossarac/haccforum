@@ -122,6 +122,8 @@ export default {
     edit: 'Düzenle',
     export: 'Dışa Aktar',
     backToList: 'Listeye Dön',
+    backToParent: 'Üst Makaleye Dön',
+    backToTopic: '{name} Konusuna Dön',
     confirmDelete: 'Bu makaleyi silmek istediğinizden emin misiniz?',
     deleteSuccess: 'Makale başarıyla silindi',
     noArticles: 'Henüz makale yok',
@@ -175,7 +177,10 @@ export default {
     minutesAgo: '{count} dk önce',
     hoursAgo: '{count} sa önce',
     daysAgo: '{count} gün önce',
-    reply: 'Yanıt'
+    reply: 'Yanıt',
+    sortBy: 'Sırala',
+    sortLatestArticle: 'Yeni Konular',
+    sortLatestReply: 'Son aktivite'
   },
   common: {
     loading: 'Yükleniyor...',

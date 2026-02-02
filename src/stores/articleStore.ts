@@ -130,10 +130,10 @@ export const useArticleStore = defineStore('article', () => {
             if (!current) {
                 throw new Error('Article state out of date. Reload and try again.')
             }
-            
+
             // Determine if this article is or will be a child article
             const isChildArticle = (input.parentId ?? current.parentId) !== null
-            
+
             const payload: any = {
                 title: input.title,
                 content: input.content,
@@ -141,7 +141,7 @@ export const useArticleStore = defineStore('article', () => {
                 parentId: input.parentId ?? null,
                 version: current.version
             }
-            
+
             // Only include topicId for root articles (no parentId)
             // Child articles inherit their parent's topic and cannot change it
             if (!isChildArticle) {
@@ -287,7 +287,7 @@ export const useArticleStore = defineStore('article', () => {
 
         // Remove from drafts list
         userDrafts.value = userDrafts.value.filter(draft => draft.id !== id)
-        
+
         // Remove from articles cache
         delete articlesById[id]
 
@@ -318,7 +318,7 @@ export const useArticleStore = defineStore('article', () => {
     const fetchTopicStatistics = async () => {
         loadingStates['topic-stats'] = true
         try {
-            const response = await apiRequest<{ 
+            const response = await apiRequest<{
                 statistics: Array<{
                     _id: string | null
                     totalArticles: number
@@ -327,12 +327,12 @@ export const useArticleStore = defineStore('article', () => {
                     latestArticles: Article[]
                 }>
             }>('/articles/topic-stats')
-            
+
             // Merge articles into cache
             response.statistics.forEach(stat => {
                 stat.latestArticles.forEach(article => mergeArticle(article))
             })
-            
+
             return response.statistics
         } finally {
             loadingStates['topic-stats'] = false
@@ -355,6 +355,61 @@ export const useArticleStore = defineStore('article', () => {
         }
     }
 
+    /**
+     * Get total reply count for an article (recursive or direct only)
+     */
+    const getReplyCount = (articleId: string, recursive: boolean = true): number => {
+        const children = getChildren(articleId).filter(c => !!c)
+
+        if (!recursive) {
+            return children.length
+        }
+
+        // Recursively count all descendants
+        let count = children.length
+        children.forEach(child => {
+            count += getReplyCount(child.id, true)
+        })
+
+        return count
+    }
+
+    /**
+     * Recursively fetch all replies for an article up to a certain depth
+     */
+    const fetchThreadRecursive = async (articleId: string, maxDepth: number = 5, currentDepth: number = 0): Promise<void> => {
+        if (currentDepth >= maxDepth) return
+
+        // Fetch immediate children
+        await fetchByParent(articleId)
+        const children = getChildren(articleId).filter(c => !!c)
+
+        // Recursively fetch children's children
+        await Promise.all(
+            children.map(child => fetchThreadRecursive(child.id, maxDepth, currentDepth + 1))
+        )
+    }
+
+    /**
+     * Get the date of the latest activity in a thread (recursive)
+     */
+    const getLatestActivityDate = (articleId: string): string => {
+        const article = articlesById[articleId]
+        if (!article) return new Date(0).toISOString()
+
+        let latest = article.publishedAt || article.createdAt
+
+        const children = getChildren(articleId).filter(c => !!c)
+        children.forEach(child => {
+            const childLatest = getLatestActivityDate(child.id)
+            if (childLatest > latest) {
+                latest = childLatest
+            }
+        })
+
+        return latest
+    }
+
     return {
         articlesById,
         allArticles,
@@ -374,6 +429,9 @@ export const useArticleStore = defineStore('article', () => {
         deleteDraft,
         fetchRecentArticles,
         fetchTopicStatistics,
-        fetchArticlesByTopic
+        fetchArticlesByTopic,
+        getReplyCount,
+        getLatestActivityDate,
+        fetchThreadRecursive
     }
 })

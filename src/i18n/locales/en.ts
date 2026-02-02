@@ -122,6 +122,8 @@ export default {
     edit: 'Edit',
     export: 'Export',
     backToList: 'Back to List',
+    backToParent: 'Back to Parent',
+    backToTopic: 'Back to {name}',
     confirmDelete: 'Are you sure you want to delete this article?',
     deleteSuccess: 'Article deleted successfully',
     noArticles: 'No articles yet',
@@ -175,7 +177,10 @@ export default {
     minutesAgo: '{count}m ago',
     hoursAgo: '{count}h ago',
     daysAgo: '{count}d ago',
-    reply: 'Reply'
+    reply: 'Reply',
+    sortBy: 'Sort by',
+    sortLatestArticle: 'Newest Topic',
+    sortLatestReply: 'Latest activity'
   },
   common: {
     loading: 'Loading...',

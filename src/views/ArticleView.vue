@@ -3,13 +3,14 @@ import type { CSSProperties } from 'vue'
 import { computed, onMounted, ref, watch, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Calendar, User, MessageSquare, ArrowLeft, Palette, Copy, Download, Undo, Trash2, ChevronUp, ChevronDown, List, X } from 'lucide-vue-next'
+import { Calendar, User, MessageSquare, ArrowLeft, Palette, Copy, Download, Undo, Trash2, ChevronUp, ChevronDown, List, X, Layers } from 'lucide-vue-next'
 import { ApiError } from '../api/client'
 import RichEditor from '../components/Editor/RichEditor.vue'
 import TocSidebar from '../components/Editor/TocSidebar.vue'
 import Dialog from '../components/Dialog.vue'
 import { useArticleStore } from '../stores/articleStore'
 import { useAuthStore } from '../stores/authStore'
+import { useTopicStore } from '../stores/topicStore'
 import { API_BASE_URL } from '../api/client'
 
 const { t } = useI18n()
@@ -17,6 +18,7 @@ const route = useRoute()
 const router = useRouter()
 const store = useArticleStore()
 const auth = useAuthStore()
+const topicStore = useTopicStore()
 
 const articleId = computed(() => route.params.id as string)
 const article = computed(() => store.getArticle(articleId.value))
@@ -331,6 +333,23 @@ const contextTextColor = computed(() => {
   return textOnBackground(base)
 })
 
+const currentTopic = computed(() => {
+  if (!article.value) return null
+  
+  let topicId = article.value.topicId
+  
+  // If no topicId and we have ancestors, try finding the root article's topicId
+  if (!topicId && article.value.ancestors && article.value.ancestors.length > 0) {
+    const rootId = article.value.ancestors[0]
+    const rootArticle = store.getArticle(rootId!)
+    if (rootArticle) {
+      topicId = rootArticle.topicId
+    }
+  }
+  
+  return topicId ? topicStore.getTopic(topicId) : null
+})
+
 const readerSurfaceStyle = computed<CSSProperties>(() => ({
   ...selectedBackground.value.style,
   color: selectedBackground.value.style.color ?? 'inherit'
@@ -503,7 +522,22 @@ const exportArticle = async () => {
 const loadArticle = async (id: string) => {
   if (!id) return
   try {
+    // Just fetch the article and its immediate children for simple display
     await Promise.all([store.fetchArticle(id), store.fetchByParent(id)])
+    
+    // Also fetch topics if not already loaded to show topic name
+    if (topicStore.topics.length === 0) {
+      await topicStore.fetchTopics()
+    }
+    
+    // If it's a reply (no topicId), we might need to fetch the root article 
+    // to get the topicId if it's not in store
+    if (article.value && !article.value.topicId && article.value.ancestors.length > 0) {
+      const rootId = article.value.ancestors[0]
+      if (!store.getArticle(rootId!)) {
+        await store.fetchArticle(rootId!)
+      }
+    }
   } catch (error) {
     console.error('[article] failed to load', error)
   }
@@ -674,9 +708,16 @@ watch(
   </button>
 
   <div v-if="article && !articleLoading" class="container article-view">
-    <button v-if="article.parentId" @click="goToParent" class="back-btn mb-4">
-      <ArrowLeft :size="16" /> Back to Parent
-    </button>
+    <div class="navigation-header flex-row justify-between mb-4">
+      <div class="flex-row gap-4">
+        <button v-if="article.parentId" @click="goToParent" class="back-btn">
+          <ArrowLeft :size="16" /> {{ t('article.backToParent') || 'Back to Parent' }}
+        </button>
+        <button v-if="currentTopic" @click="router.push(`/topic/${currentTopic.id}`)" class="back-btn">
+          <Layers :size="16" /> {{ t('article.backToTopic', { name: currentTopic.name }) || `Back to ${currentTopic.name}` }}
+        </button>
+      </div>
+    </div>
 
     <article class="main-article">
       <h1 class="article-title" ref="articleHeaderRef">{{ article.title }}</h1>
@@ -846,12 +887,16 @@ watch(
     </div>
 
     <div v-if="!repliesLoading" class="replies-list" :key="articleId">
-      <div v-for="reply in replies" :key="reply?.id || ''" class="reply-card" @click="reply && router.push(`/article/${reply.id}`)">
-        <template v-if="reply">
-          <h4>{{ reply.title }}</h4>
-          <div class="reply-preview">{{ reply.content.replace(/<[^>]*>?/gm, '').substring(0, 100) }}...</div>
-          <div class="reply-meta">
-            {{ reply.author.name || 'Unknown' }} • {{ formatDate(reply.createdAt) }}
+      <div v-if="replies.length === 0" class="no-replies">
+        <p>No replies yet. Be the first to reply!</p>
+      </div>
+      <div v-else class="replies-simple">
+        <template v-for="reply in replies" :key="reply?.id">
+          <div v-if="reply" class="reply-simple-card" @click="router.push(`/article/${reply.id}`)">
+            <h4>{{ reply.title }}</h4>
+            <div class="reply-meta">
+              {{ reply.author.name || 'Unknown' }} • {{ formatDate(reply.createdAt) }}
+            </div>
           </div>
         </template>
       </div>
@@ -937,6 +982,54 @@ watch(
 .reply-meta {
   font-size: 0.8rem;
   color: var(--text-secondary);
+}
+
+/* Thread view styles */
+.replies-list {
+  margin-top: 1.5rem;
+}
+
+.replies-simple {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.reply-simple-card {
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.reply-simple-card:hover {
+  border-color: var(--accent-color);
+  transform: translateX(4px);
+}
+
+.reply-simple-card h4 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.reply-meta {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.no-replies {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+.no-replies p {
+  margin: 0;
 }
 
 .secondary-btn {

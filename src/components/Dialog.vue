@@ -13,6 +13,8 @@ const props = defineProps<{
   initialValue?: string
   confirmText?: string
   cancelText?: string
+  confirmLoading?: boolean
+  hideFooter?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -37,19 +39,25 @@ watch(() => props.isOpen, (newVal) => {
 })
 
 const handleClose = () => {
+  if (props.confirmLoading) return
   emit('close')
 }
 
 const handleConfirm = () => {
+  if (props.confirmLoading) return
   if (props.type === 'input') {
     emit('confirm', inputValue.value)
   } else {
     emit('confirm')
   }
-  emit('close')
+  // Only auto-close if not loading (though usually handled by parent)
+  if (!props.confirmLoading) {
+    emit('close')
+  }
 }
 
 const handleCancel = () => {
+  if (props.confirmLoading) return
   emit('cancel')
   emit('close')
 }
@@ -69,7 +77,7 @@ const handleKeydown = (event: KeyboardEvent) => {
       <div class="dialog-card" tabindex="-1" @keydown="handleKeydown">
         <div class="dialog-header">
           <h3>{{ title }}</h3>
-          <button @click="handleClose" class="close-btn" aria-label="Close">
+          <button @click="handleClose" class="close-btn" aria-label="Close" :disabled="confirmLoading">
             <X :size="20" />
           </button>
         </div>
@@ -90,17 +98,25 @@ const handleKeydown = (event: KeyboardEvent) => {
           </slot>
         </div>
 
-        <div class="dialog-footer" v-if="!$slots.content">
-          <button
-            v-if="type === 'confirm' || type === 'input'"
-            @click="handleCancel"
-            class="secondary-btn"
-          >
-            {{ cancelText || 'Cancel' }}
-          </button>
-          <button @click="handleConfirm" class="primary-btn">
-            {{ confirmText || 'OK' }}
-          </button>
+        <div class="dialog-footer" v-if="!hideFooter">
+          <slot name="footer">
+            <button
+              v-if="type === 'confirm' || type === 'input'"
+              @click="handleCancel"
+              class="secondary-btn"
+              :disabled="confirmLoading"
+            >
+              {{ cancelText || 'Cancel' }}
+            </button>
+            <button 
+              @click="handleConfirm" 
+              class="primary-btn"
+              :disabled="confirmLoading"
+            >
+              <span v-if="confirmLoading" class="loading-spinner"></span>
+              {{ confirmText || 'OK' }}
+            </button>
+          </slot>
         </div>
       </div>
     </div>
