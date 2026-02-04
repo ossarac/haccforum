@@ -254,11 +254,21 @@ onMounted(() => {
 <style scoped>
 .main-header {
   border-bottom: 1px solid var(--border-color);
-  background-color: var(--surface-color);
+  background-color: rgba(255, 255, 255, 0.8); /* Fallback for light mode */
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   position: sticky;
   top: 0;
   z-index: 50;
-  padding: 0.5rem 0;
+  padding: 0;
+}
+
+.main-header .container {
+  padding: 0.5rem 1rem; /* Override default 2rem top/bottom padding */
+}
+
+:global(.dark) .main-header {
+  background-color: rgba(20, 20, 20, 0.8); /* Fallback for dark mode */
 }
 
 .logo-area {
@@ -272,8 +282,8 @@ onMounted(() => {
 .logo-icon {
   background: var(--accent-color);
   color: white;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -286,8 +296,8 @@ onMounted(() => {
   border: none;
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.4rem 0.6rem;
+  gap: 0.3rem;
+  padding: 0.3rem 0.5rem;
   color: var(--text-secondary);
   font-size: 0.9rem;
   border-radius: var(--radius-sm);

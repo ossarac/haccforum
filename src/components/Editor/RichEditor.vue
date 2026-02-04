@@ -599,7 +599,7 @@ watch(() => editor.value, (ed) => {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   position: sticky;
-  top: 80px; /* Adjusted for header */
+  top: 60px; /* Adjusted for thinner header */
   z-index: 10;
   flex-wrap: wrap;
   box-shadow: var(--shadow-sm);
